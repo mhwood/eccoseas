@@ -2,7 +2,7 @@
 
 # -- Project information
 
-project = 'EccoSeas'
+project = 'eccoseas'
 copyright = '2024, Wood'
 author = 'Mike Wood'
 

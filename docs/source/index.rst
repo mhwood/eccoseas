@@ -17,4 +17,6 @@ Contents
 .. toctree::
 
    usage
-   api
+   ecco
+   downscale
+   toolbox

@@ -3,9 +3,7 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 import netCDF4 as nc4
-
-
-
+import netCDF4 as nc4
 
 def read_ecco_field_to_faces(file_path, llc, dim):
 
@@ -100,6 +98,21 @@ def read_ecco_faces_to_tiles(ecco_faces, llc, dim):
         ecco_tiles[11] = ecco_faces[5][:, :, :llc]
         ecco_tiles[12] = ecco_faces[5][:, :, llc:2*llc]
         ecco_tiles[13] = ecco_faces[5][:, :, 2*llc:]
+    return(ecco_tiles)
+
+def read_ecco_grid_tiles_from_nc(grid_dir, var_name):
+    ecco_tiles = {}
+
+    for tile_number in range(1,14):
+        ds = nc4.Dataset(os.path.join(grid_dir,'GRID.'+'{:04d}'.format(tile_number)+'.nc'))
+        if var_name in ['hFacC','hFacS','hFacW']:
+            grid = ds.variables[var_name][:, :, :]
+        elif var_name in ['DRC','DRF','RC','RF']:
+            grid = ds.variables[var_name][:]
+        else:
+            grid = ds.variables[var_name][:, :]
+        ds.close()
+        ecco_tiles[tile_number] = np.array(grid)
     return(ecco_tiles)
 
 def read_ecco_geometry_to_faces(ecco_dir,llc):

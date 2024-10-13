@@ -44,8 +44,8 @@ def create_hFacC_grid(bathy,delR, hFacMin=0.2, hFacMinDr=5.0):
     # Pythonize the above loops
     hFacC = np.zeros((len(RL), np.shape(bathy)[0], np.shape(bathy)[1]))
     for k in range(len(RL)):
-        if k%5==0:
-            print('     - Calculating hFacC for depth cells '+str(k)+' to '+str(k+5))
+        # if k%5==0:
+        #     print('     - Calculating hFacC for depth cells '+str(k)+' to '+str(k+5))
         hFacMnSz = np.max([hFacMin, np.min([hFacMinDr * recip_drF[k], 1])])
         for i in range(np.shape(bathy)[0]):
             for j in range(np.shape(bathy)[1]):
@@ -82,8 +82,8 @@ def create_hFacS_grid(bathy,delR, hFacMin=0.2, hFacMinDr=5.0):
 
     hFacS = np.zeros((len(delR), np.shape(bathy)[0], np.shape(bathy)[1]))
     for k in range(len(delR)):
-        if k%5==0:
-            print('     - Calculating hFacS for depth cells '+str(k)+' to '+str(k+5))
+        # if k%5==0:
+        #     print('     - Calculating hFacS for depth cells '+str(k)+' to '+str(k+5))
         hFacMnSz = np.max([hFacMin, np.min([hFacMinDr * recip_drF[k], 1])])
         for j in range(np.shape(rLowS)[0]):
             for i in range(np.shape(rLowS)[1]):
@@ -122,8 +122,8 @@ def create_hFacW_grid(bathy,delR, hFacMin=0.2, hFacMinDr=5.0):
 
     hFacW = np.zeros((len(delR), np.shape(bathy)[0], np.shape(bathy)[1]))
     for k in range(len(delR)):
-        if k%5==0:
-            print('     - Calculating hFacW for depth cells '+str(k)+' to '+str(k+5))
+        # if k%5==0:
+        #     print('     - Calculating hFacW for depth cells '+str(k)+' to '+str(k+5))
         hFacMnSz = np.max([hFacMin, np.min([hFacMinDr * recip_drF[k], 1])])
         for j in range(np.shape(rLowW)[0]):
             for i in range(np.shape(rLowW)[1]):

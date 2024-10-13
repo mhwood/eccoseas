@@ -414,15 +414,21 @@ def downscale_3D_field_with_zeros(L0_XC, L0_YC, L0_var, L0_wet_grid, L0_wet_grid
 
     return(full_grid)
 
-def downscale_3D_points(L0_points, L0_var, L0_wet_grid, #L0_wet_grid_on_L1,
+def downscale_3D_points(L0_points, L0_var, L0_wet_grid,
                         XC_subset, YC_subset, L1_wet_grid,
-                        mean_vertical_difference=0,fill_downward=True,printing=False,remove_zeros=True):
+                        mean_vertical_difference=0,fill_downward=True,
+                        printing=False,remove_zeros=True, testing=False):
 
     # full_grid = np.zeros_like(L1_wet_grid).astype(float)
     full_grid = np.zeros((np.shape(L1_wet_grid)[0],np.shape(XC_subset)[0],np.shape(XC_subset)[1]))
     all_L0_points = np.copy(L0_points)
 
-    for k in range(np.shape(L0_var)[0]):
+    if testing:
+        kMax = 1
+    else:
+        kMax = np.shape(L0_var)[0]
+
+    for k in range(kMax):
 
         continue_to_interpolation = True
 
@@ -483,9 +489,9 @@ def downscale_3D_points(L0_points, L0_var, L0_wet_grid, #L0_wet_grid_on_L1,
 
     return(full_grid)
 
-def downscale_3D_points_with_zeros(L0_points, L0_var, L0_wet_grid, #L0_wet_grid_on_L1,
+def downscale_3D_points_with_zeros(L0_points, L0_var, L0_wet_grid,
                        XC_subset, YC_subset, L1_wet_grid,
-                       mean_vertical_difference=0,fill_downward=True,printing=False):
+                       mean_vertical_difference=0,fill_downward=True,printing=False, testing=False):
 
     # full_grid = np.zeros_like(L1_wet_grid).astype(float)
     full_grid = np.zeros((np.shape(L1_wet_grid)[0],np.shape(XC_subset)[0],np.shape(XC_subset)[1]))

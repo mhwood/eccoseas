@@ -5,4 +5,5 @@ build-backend = "flit_core.buildapi"
 [project]
 name = "eccoseas"
 authors = [{name = "Mike Wood", email = "mike.wood@sjsu.edu"}]
-dynamic = ["version", "description"]
+version = "0.1.0"
+description = "A toolkit for ECCO and MITgcm regional models"

@@ -1,7 +1,11 @@
-Overview
-********
+Utilities
+*********
 
 This is an overview of the utilities
 
-ECCO
-============
+.. toctree::
+   :maxdepth: 3
+
+   downscale.rst
+   ecco.rst
+   toolbox.rst

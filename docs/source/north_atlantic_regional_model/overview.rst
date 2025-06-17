@@ -1,7 +1,7 @@
-Overview
-********
+North Atlantic Regional Model
+*****************************
 
 This is a description of the North Atlantic model
 
-Introduction
-============
+Overview
+========

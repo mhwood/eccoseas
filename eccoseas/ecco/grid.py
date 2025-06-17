@@ -3,11 +3,8 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 import netCDF4 as nc4
-import netCDF4 as nc4
 
-def read_ecco_field_to_faces(file_path, llc, dim):
-
-    Nr = 50
+def read_ecco_field_to_faces(file_path, llc, dim, Nr=50):
 
     grid_array = np.fromfile(file_path,'>f4')
     N = 13*llc*llc
@@ -68,7 +65,7 @@ def read_ecco_field_to_faces(file_path, llc, dim):
 
     return(field_faces)
 
-def read_ecco_faces_to_tiles(ecco_faces, llc, dim):
+def ecco_faces_to_tiles(ecco_faces, llc, dim):
     ecco_tiles = {}
     if dim==2:
         ecco_tiles[1] = ecco_faces[1][:llc,:]
@@ -116,31 +113,31 @@ def read_ecco_grid_tiles_from_nc(grid_dir, var_name):
     return(ecco_tiles)
 
 def read_ecco_geometry_to_faces(ecco_dir,llc):
-    grid_file_dir = os.path.join(ecco_dir, 'LLC' + str(llc) + '_Files', 'mitgrid_tiles')
+
     XC_faces = {}
     YC_faces = {}
     for i in [1, 2, 3, 4, 5]:
         if i < 3:
-            grid_dict = sg.gridio.read_mitgridfile(os.path.join(grid_file_dir, 'tile00' + str(i) + '.mitgrid'), llc,
-                                                   3 * llc)
+            grid = np.fromfile(os.path.join(ecco_dir, 'tile00' + str(i) + '.mitgrid'), '>f8')
+            grid = np.reshape(grid, (16, 3 * llc+1, llc+1))
         if i == 3:
-            grid_dict = sg.gridio.read_mitgridfile(os.path.join(grid_file_dir, 'tile00' + str(i) + '.mitgrid'), llc,
-                                                   llc)
+            grid = np.fromfile(os.path.join(ecco_dir, 'tile00' + str(i) + '.mitgrid'), '>f8')
+            grid = np.reshape(grid, (16, llc+1, llc+1))
         if i > 3:
-            grid_dict = sg.gridio.read_mitgridfile(os.path.join(grid_file_dir, 'tile00' + str(i) + '.mitgrid'), 3 * llc,
-                                                   llc)
-        XC_face = grid_dict['XC'].T
-        YC_face = grid_dict['YC'].T
+            grid = np.fromfile(os.path.join(ecco_dir, 'tile00' + str(i) + '.mitgrid'), '>f8')
+            grid = np.reshape(grid, (16, llc+1, 3 * llc+1))
+        XC_face = grid[0,:-1,:-1]
+        YC_face = grid[1,:-1,:-1]
         XC_faces[i] = XC_face
         YC_faces[i] = YC_face
 
-    angleCS_path = os.path.join(ecco_dir, 'LLC' + str(llc) + '_Files', 'input_init','AngleCS.data')
+    angleCS_path = os.path.join(ecco_dir,'AngleCS.data')
     AngleCS_faces = read_ecco_field_to_faces(angleCS_path, llc, dim=2)
 
-    angleSN_path = os.path.join(ecco_dir, 'LLC' + str(llc) + '_Files', 'input_init', 'AngleSN.data')
+    angleSN_path = os.path.join(ecco_dir,'AngleSN.data')
     AngleSN_faces = read_ecco_field_to_faces(angleSN_path, llc, dim=2)
 
-    hFacC_path = os.path.join(ecco_dir, 'LLC' + str(llc) + '_Files', 'input_init', 'hFacC.data')
+    hFacC_path = os.path.join(ecco_dir, 'hFacC.data')
     hFacC_faces = read_ecco_field_to_faces(hFacC_path, llc, dim=3)
 
     # plt.imshow(hFacC_faces[5][5,:,:])
@@ -244,90 +241,6 @@ def read_ecco_grid_geometry(ecco_dir,llc,ordered_ecco_tiles,ordered_ecco_tile_ro
                         341.50, 364.50, 387.50, 410.50, 433.50, 456.50])
 
     return(ecco_XC,ecco_YC,ecco_AngleCS,ecco_AngleSN,ecco_hfacC,ecco_delR)
-
-def read_tile_from_ECCO_compact(var_grid,tile_number, print_messages=False):
-
-    sNx = 90
-    sNy = 90
-
-    if print_messages:
-        print('Reading grid for tile number '+str(tile_number))
-
-    # # adjust tile number to account for blank cells
-    # tile_add = 6
-    # if tile_number>2:
-    #     tile_add+=1
-    # if tile_number>4:
-    #     tile_add+=1
-    # if tile_number>23:
-    #     tile_add+=4
-    # if tile_number>26:
-    #     tile_add+=2
-    # tile_number += tile_add
-    #
-    # if print_messages:
-    #     print('    - The tile number including blank cells is '+str(tile_number))
-
-    # get the face number
-    if tile_number < 28:
-        face_number = 1
-    if tile_number >= 28 and tile_number < 55:
-        face_number = 2
-    if tile_number >= 55 and tile_number<64:
-        face_number = 3
-    if tile_number >= 64 and tile_number<91:
-        face_number = 4
-    if tile_number >= 91:
-        face_number = 5
-
-    if print_messages:
-        print('    - It is found in face '+str(face_number))
-
-    face_indices_in_compact = {1:[0,9*sNx],
-                               2:[9*sNx,(18)*sNx],
-                               3:[(18)*sNx,(21)*sNx],
-                               4:[(21)*sNx,(30)*sNx],
-                               5:[(30)*sNx,(39)*sNx]}
-    face_dimensions = {1:[9*sNy,3*sNx],
-                       2:[9*sNy,3*sNx],
-                       3:[3*sNy,3*sNx],
-                       4:[3*sNy,9*sNx],
-                       5:[3*sNy,9*sNx]}
-    face_tile_dimensions = {1: [9, 3],
-                           2: [9, 3],
-                           3: [3, 3],
-                           4: [3, 9],
-                           5: [3, 9]}
-    face_first_tile = {1:1,2:28,3:55,4:64,5:91}
-
-    indices = face_indices_in_compact[face_number]
-    dimensions = face_dimensions[face_number]
-
-    if print_messages:
-        print('    - The face will be dimension '+str(dimensions))
-        print('    - The face will be read from row indices ' + str(indices)+' from the compact file')
-
-    face_subset = var_grid[:,indices[0]:indices[1],:]
-    face_subset = np.reshape(face_subset,(np.shape(face_subset)[0],dimensions[0],dimensions[1]))
-
-    if print_messages:
-        print('    - The tile number in the face is '+str((tile_number-face_first_tile[face_number]+1)))
-        print('    - The number of tiles before the tile in the face are  '+str(face_tile_dimensions[face_number][1]))
-
-    ll_row = sNy*int(((tile_number-face_first_tile[face_number]) // face_tile_dimensions[face_number][1]))
-    ll_col = sNx*((tile_number-face_first_tile[face_number]) % face_tile_dimensions[face_number][1])
-
-    if print_messages:
-        print('    - The lower left row in the face is '+str(ll_row))
-        print('    - The lower left col in the face is ' + str(ll_col))
-
-    tile_subset = face_subset[:,ll_row:ll_row+sNy,ll_col:ll_col+sNx]
-
-    # plt.imshow(tile_subset[0,:,:],origin='lower')
-    # plt.title(str(tile_number-tile_add))
-    # plt.show()
-
-    return(tile_subset)
 
 def read_ecco_pickup_to_stiched_grid(pickup_file_path,ordered_ecco_tiles,ordered_ecco_tile_rotations):
 

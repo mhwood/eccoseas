@@ -4,9 +4,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.interpolate import griddata, interp1d
 import netCDF4 as nc4
+import torch
 
-
-def spread_var_horizontally_in_wet_grid(var_grid,wet_grid):
+def spread_var_horizontally_in_wet_grid_legacy(var_grid,wet_grid):
     rows = np.arange(np.shape(var_grid)[0])
     cols = np.arange(np.shape(var_grid)[1])
     Cols,Rows = np.meshgrid(cols,rows)
@@ -46,6 +46,75 @@ def spread_var_horizontally_in_wet_grid(var_grid,wet_grid):
                 continue_iter = False
 
     return(var_grid,n_remaining)
+
+def spread_var_horizontally_in_wet_grid(var_grid_np, wet_grid_np):
+    device = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
+
+    var_grid = torch.tensor(var_grid_np, dtype=torch.float32, device=device)
+    wet_grid = torch.tensor(wet_grid_np, dtype=torch.float32, device=device)
+
+    H, W = var_grid.shape
+    rows = torch.arange(H, device=device)
+    cols = torch.arange(W, device=device)
+    Cols, Rows = torch.meshgrid(cols, rows, indexing='xy')
+
+    Cols = Cols.contiguous()
+    Rows = Rows.contiguous()
+
+    is_remaining = (var_grid == 0) & (wet_grid == 1)
+    n_remaining = is_remaining.sum().item()
+
+    continue_iter = True
+
+    while continue_iter:
+        Wet_Rows = Rows[wet_grid == 1]
+        Wet_Cols = Cols[wet_grid == 1]
+        Wet_Vals = var_grid[wet_grid == 1]
+
+        valid_mask = Wet_Vals != 0
+        Wet_Rows = Wet_Rows[valid_mask]
+        Wet_Cols = Wet_Cols[valid_mask]
+        Wet_Vals = Wet_Vals[valid_mask]
+
+        if Wet_Vals.numel() == 0:
+            break
+
+        # Remaining cells to update
+        rows_remaining, cols_remaining = torch.where(is_remaining)
+        if rows_remaining.numel() == 0:
+            break
+
+        # Expand dimensions for broadcasting
+        target_r = rows_remaining.unsqueeze(1).float()
+        target_c = cols_remaining.unsqueeze(1).float()
+        source_r = Wet_Rows.unsqueeze(0).float()
+        source_c = Wet_Cols.unsqueeze(0).float()
+
+        # Compute distances between all remaining and all populated wet cells
+        dists = torch.sqrt((source_r - target_r) ** 2 + (source_c - target_c) ** 2)
+
+        # Find the closest wet cell for each remaining cell
+        min_dists, min_indices = torch.min(dists, dim=1)
+
+        # Only update if within sqrt(2) distance
+        close_mask = min_dists < (2 ** 0.5)
+        update_rows = rows_remaining[close_mask]
+        update_cols = cols_remaining[close_mask]
+        update_vals = Wet_Vals[min_indices[close_mask]]
+
+        var_grid[update_rows, update_cols] = update_vals
+
+        # Recompute what's left
+        new_is_remaining = (var_grid == 0) & (wet_grid == 1)
+        new_n_remaining = new_is_remaining.sum().item()
+
+        if new_n_remaining < n_remaining:
+            n_remaining = new_n_remaining
+            is_remaining = new_is_remaining
+        else:
+            continue_iter = False
+
+    return var_grid.cpu().numpy(), n_remaining
 
 def spread_var_horizontally_in_wet_grid_with_mask(var_grid,wet_grid,spread_mask):
 

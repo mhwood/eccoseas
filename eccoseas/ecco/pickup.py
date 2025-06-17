@@ -1,43 +1,121 @@
 
 import os
 import numpy as np
-import simplegrid as sg
 import matplotlib.pyplot as plt
 import netCDF4 as nc4
-from MITgcmutils import mds
-
+from eccoseas.ecco import grid
 
 #################################################################################################
 # pickup functions
 
-def read_pickup_file_to_compact(pickup_file_path):
+def read_pickup_metadata(pickup_metadata_file_path):
+    f = open(pickup_metadata_file_path, 'r')
+    lines = f.readlines()
+    f.close()
 
-    Nr = 50
-    print('      Reading from '+pickup_file_path)
-    global_data, _, global_metadata = mds.rdmds(pickup_file_path, returnmeta=True)
+    metadata = {}
+    for ll, line in enumerate(lines):
+        line = line.strip().split()
+        if line[0].startswith('nDims'):
+            metadata['nDims'] = int(line[3])
+        elif line[0].startswith('dimList'):
+            metadata['dimList'] = []
+            for d in range(metadata['nDims']):
+                dimlist_line = lines[ll+d+1].strip().split()
+                dimlist_vals = []
+                for i in range(len(dimlist_line)):
+                    dimlist_vals.append(int(dimlist_line[i].strip().replace(',', '')))
+                metadata['dimList'].append(dimlist_vals)
+        elif line[0].startswith('dataprec'):
+            metadata['dataprec'] = line[3][1:-1]
+        elif line[0].startswith('nrecords'):
+            metadata['nrecords'] = int(line[3])
+        elif line[0].startswith('timeStepNumber'):
+            metadata['timeStepNumber'] = int(line[3])
+        elif line[0].startswith('timeInterval'):
+            metadata['timeInterval'] = float(line[3])
+        elif line[0].startswith('nFlds'):
+            metadata['nFlds'] = int(line[3])
+        elif line[0].startswith('fldList'):
+            metadata['fldList'] = []
+            fldlist_line = lines[ll+1].strip().split()
+            for fld in fldlist_line:
+                fld = fld.replace("'", '')
+                if len(fld)>0:
+                    metadata['fldList'].append(fld)#fldlist_line[i][1:-1].strip())
+        else:
+            pass
+    return(metadata)
+
+def read_ecco_pickup_file_to_compact(pickup_file_path, Nr=50, verbose=False):
+
+    if pickup_file_path.endswith('.data'):
+        raise ValueError('Pickup file path should not end with .data (omit extension)')
+    if pickup_file_path.endswith('.meta'):
+        raise ValueError('Pickup file path should not end with .meta (omit extension)')
+
+    if verbose:
+        print('      Reading from '+pickup_file_path)
+
+    global_metadata = read_pickup_metadata(pickup_file_path+'.meta')
+    global_data = np.fromfile(pickup_file_path+'.data', dtype=global_metadata['dataprec'])
+    global_data = global_data.reshape(
+        (global_metadata['nrecords'], global_metadata['dimList'][0][0],
+         global_metadata['dimList'][1][0]))
 
     has_Nr = {'uvel': True, 'vvel': True, 'theta': True,
               'salt': True, 'gunm1': True, 'gvnm1': True,
               'gunm2': True, 'gvnm2': True, 'etan': False,
               'detahdt': False, 'etah': False}
 
-    var_names = []
-    row_bounds = []
-    var_grids = []
+    var_grids = {}
 
     start_row = 0
-    for var_name in global_metadata['fldlist']:
+    for var_name in global_metadata['fldList']:
         if has_Nr[var_name.strip().lower()]:
             end_row = start_row + Nr
         else:
             end_row = start_row + 1
         var_grid = global_data[start_row:end_row,:,:]
-        var_grids.append(var_grid)
-        row_bounds.append([start_row,end_row])
+        var_grids[var_name] = var_grid
         start_row=end_row
-        var_names.append(var_name.strip())
 
-    return(var_names,row_bounds,var_grids,global_metadata)
+    return(var_grids, global_metadata)
+
+def read_ecco_pickup_file_to_faces(pickup_file_path, llc, Nr=50, verbose=False):
+
+    if pickup_file_path.endswith('.data'):
+        raise ValueError('Pickup file path should not end with .data (omit extension)')
+    if pickup_file_path.endswith('.meta'):
+        raise ValueError('Pickup file path should not end with .meta (omit extension)')
+
+    if verbose:
+        print('      Reading from '+pickup_file_path)
+
+    global_metadata = read_pickup_metadata(pickup_file_path+'.meta')
+    global_data_faces = grid.read_ecco_field_to_faces(pickup_file_path+'.data', llc=llc, dim=3,
+                                                      Nr=global_metadata['nrecords'])
+
+    has_Nr = {'uvel': True, 'vvel': True, 'theta': True,
+              'salt': True, 'gunm1': True, 'gvnm1': True,
+              'gunm2': True, 'gvnm2': True, 'etan': False,
+              'detahdt': False, 'etah': False}
+
+    var_grid_faces = {}
+
+    start_row = 0
+    for var_name in global_metadata['fldList']:
+        if has_Nr[var_name.strip().lower()]:
+            end_row = start_row + Nr
+        else:
+            end_row = start_row + 1
+        fld_faces = {}
+        for face in range(1,6):
+            fld_faces[face] = global_data_faces[face][start_row:end_row,:,:]
+        var_grid_faces[var_name] = fld_faces
+        start_row=end_row
+
+    return(var_grid_faces, global_metadata)
 
 #################################################################################################
 # seaice pickup functions

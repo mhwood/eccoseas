@@ -18,9 +18,41 @@ The functions used in this demo include the tasks in the following list:
 4. Reading ECCO external forcing fields
 5. Interpolating 2D and 3D fields to a regional domain for both initial and boundary conditions
 
+Model Grid
+==========
+
+.. toctree::
+
+   model_grid
+
+
 Bathymetry
 ==========
 
 .. toctree::
 
    bathymetry
+
+
+Initial Conditions
+===========================
+
+.. toctree::
+
+   initial_conditions
+
+
+External Forcing Conditions
+===========================
+
+.. toctree::
+
+   external_conditions
+
+
+Boundary Conditions
+===========================
+
+.. toctree::
+
+   boundary_conditions

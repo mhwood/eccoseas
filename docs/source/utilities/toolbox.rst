@@ -1,9 +1,6 @@
 toolbox
 =======
 
-.. autosummary::
-   :toctree: generated
-
 The toolbox of the eccoseas package has several helpful modules.
 
 Key Modules

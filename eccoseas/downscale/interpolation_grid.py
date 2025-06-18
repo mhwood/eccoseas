@@ -1,14 +1,26 @@
-
 import os
 import numpy as np
-import matplotlib.pyplot as plt
 from scipy.interpolate import griddata, interp1d
 import netCDF4 as nc4
 
-
 def create_interpolation_grid(L0_XC, L0_YC, L0_var, L0_wet_grid, L0_wet_grid_on_L1,
                               XC_subset, YC_subset, L1_wet_grid):
+    """
+    Interpolates a 3D variable from a Level 0 grid to a Level 1 grid, 
+    handling gaps using horizontal and vertical spreading and optionally
+    nearest-neighbor fill.
 
+    Parameters:
+        L0_XC, L0_YC : 2D arrays of source grid X/Y coordinates
+        L0_var : 3D array of source variable to interpolate (levels, lat, lon)
+        L0_wet_grid : 3D mask of valid ocean points on L0 grid
+        L0_wet_grid_on_L1 : 3D mask of L0 wet grid mapped to L1 domain
+        XC_subset, YC_subset : 2D arrays of target grid X/Y coordinates
+        L1_wet_grid : 3D mask of valid ocean points on L1 grid
+
+    Returns:
+        interpolation_type_grid_full, source_row_grid_full, source_col_grid_full, source_level_grid_full
+    """
     testing = False
     remove_zeros = True
     printing = True
@@ -16,227 +28,167 @@ def create_interpolation_grid(L0_XC, L0_YC, L0_var, L0_wet_grid, L0_wet_grid_on_
     fill_with_nearest_at_end = True
     mean_vertical_difference = 0
 
-    full_grid = np.zeros((np.shape(L1_wet_grid)[0], np.shape(XC_subset)[0], np.shape(XC_subset)[1]))
-    interpolation_type_grid_full = np.zeros((np.shape(L1_wet_grid)[0], np.shape(XC_subset)[0], np.shape(XC_subset)[1])).astype(int)
-    source_row_grid_full = np.zeros((np.shape(L1_wet_grid)[0], np.shape(XC_subset)[0], np.shape(XC_subset)[1])).astype(int)
-    source_col_grid_full = np.zeros((np.shape(L1_wet_grid)[0], np.shape(XC_subset)[0], np.shape(XC_subset)[1])).astype(int)
-    source_level_grid_full = np.zeros((np.shape(L1_wet_grid)[0], np.shape(XC_subset)[0], np.shape(XC_subset)[1])).astype(int)
+    # Initialize output arrays
+    shape = (L1_wet_grid.shape[0], XC_subset.shape[0], XC_subset.shape[1])
+    full_grid = np.zeros(shape)
+    interpolation_type_grid_full = np.zeros(shape, dtype=int)
+    source_row_grid_full = np.zeros(shape, dtype=int)
+    source_col_grid_full = np.zeros(shape, dtype=int)
+    source_level_grid_full = np.zeros(shape, dtype=int)
 
-    rows = np.arange(np.shape(XC_subset)[0])
-    cols = np.arange(np.shape(XC_subset)[1])
+    rows = np.arange(XC_subset.shape[0])
+    cols = np.arange(XC_subset.shape[1])
     Cols, Rows = np.meshgrid(cols, rows)
 
-    if testing:
-        K = 1
-    else:
-        K = np.shape(L1_wet_grid)[0]
+    K = 1 if testing else L1_wet_grid.shape[0]
 
     for k in range(K):
-
-        continue_to_interpolation = True
-
-        if continue_to_interpolation:
+        if not np.any(L1_wet_grid[k, :, :] > 0):
+            grid = np.zeros_like(XC_subset, dtype=float)
+        else:
             if printing:
-                print('                - Working on level ' + str(k) + ' of ' + str(
-                    np.shape(L1_wet_grid)[0]) + ' (' + str(np.sum(L1_wet_grid[k, :, :] > 0)) + ' nonzero points found)')
+                print(f' - Working on level {k} of {L1_wet_grid.shape[0]} ({np.sum(L1_wet_grid[k] > 0)} nonzero points found)')
 
-            if np.any(L1_wet_grid[k, :, :] > 0):
-                # take an initial stab at the interpolation
-                L0_points = np.hstack([np.reshape(L0_XC, (np.size(L0_XC), 1)),
-                                       np.reshape(L0_YC, (np.size(L0_YC), 1))])
-                L0_values = np.reshape(L0_var[k, :, :], (np.size(L0_var[k, :, :]), 1))
-                L0_wet_grid_vert = np.reshape(L0_wet_grid[k, :, :], (np.size(L0_wet_grid[k, :, :]), 1))
-                L0_points = L0_points[L0_wet_grid_vert[:, 0] != 0, :]
-                L0_values = L0_values[L0_wet_grid_vert[:, 0] != 0, :]
-                if remove_zeros:
-                    L0_points = L0_points[L0_values[:, 0] != 0, :]
-                    L0_values = L0_values[L0_values[:, 0] != 0, :]
+            # Prepare valid interpolation points
+            L0_points = np.column_stack([L0_XC.ravel(), L0_YC.ravel()])
+            L0_values = L0_var[k].ravel()
+            L0_wet = L0_wet_grid[k].ravel()
 
-                if len(L0_points) > 4:
-                    grid = griddata(L0_points, L0_values, (XC_subset, YC_subset), method='linear', fill_value=0)
-                    grid = grid[:, :, 0]
-                    # grid_nearest = griddata(L0_points, L0_values, (XC_subset, YC_subset), method='nearest', fill_value=0)
-                    # grid_nearest[:,:,0]
-                    if not np.any(grid != 0):
-                        grid = griddata(L0_points, L0_values, (XC_subset, YC_subset), method='nearest', fill_value=0)
-                        grid = grid[:, :, 0]
-                else:
-                    grid = np.zeros_like(XC_subset).astype(float)
+            mask = L0_wet != 0
+            if remove_zeros:
+                mask &= L0_values != 0
 
-                # if k==0:
-                #     plt.imshow(grid,origin='lower')
-                #     plt.show()
+            L0_points = L0_points[mask]
+            L0_values = L0_values[mask]
 
-                # mask out any values which should be 0'd based on the old bathy
-                grid[L0_wet_grid_on_L1[k, :, :] == 0] = 0
-
-                # mask out any values which should be 0'd based on the new bathy
-                grid[L1_wet_grid[k, :, :] == 0] = 0
-
-                # mask a mask of where the interpolation occured
-                interpolation_type_grid = (grid!=0).astype(int)
-
-                # make arrays of rows cols and levels wherever the interpolation occured
-                source_row_grid = np.copy(interpolation_type_grid) * Rows
-                source_col_grid = np.copy(interpolation_type_grid) * Cols
-                source_level_grid = np.copy(interpolation_type_grid) * k
-
-                # set areas that havent been filled yet to -1 because rows, cols and levels can have index 0
-                negative_interpolation_type_grid = np.copy(interpolation_type_grid)
-                negative_interpolation_type_grid[interpolation_type_grid == 0] = - 1
-                source_row_grid[negative_interpolation_type_grid == -1] = -1
-                source_col_grid[negative_interpolation_type_grid == -1] = -1
-                source_level_grid[negative_interpolation_type_grid == -1] = -1
-
-                is_remaining = np.logical_and(grid == 0, L1_wet_grid[k, :, :] == 1)
-                n_remaining = np.sum(is_remaining)
-                if printing:
-                    print('                  - Remaining points before horizontal spread: ' + str(n_remaining))
-
-                # spread the the variable outward to new wet cells, keeping track of the source rows, cols, and levels as you go
-                grid, source_row_grid, source_col_grid, source_level_grid, n_remaining = \
-                    count_spreading_rows_and_cols_in_wet_grid(grid, source_row_grid,source_col_grid,source_level_grid, L1_wet_grid[k, :, :])
-
-                # mark the interpolation grid to indicate the variable was spread horizontally
-                interpolation_type_grid[np.logical_and(source_row_grid != -1, interpolation_type_grid == 0)] = 2
-
-                if printing:
-                    print('                  - Remaining points before downward spread: '+str(n_remaining)+' (check: filled '+str(np.sum(interpolation_type_grid==2))+')')
-
-                # if there are still values which need to be filled, spread downward
-                if n_remaining > 0 and fill_downward and k > 0:
-                    grid, source_row_grid, source_col_grid, source_level_grid = \
-                        count_spreading_levels_in_wet_grid(full_grid, grid,L1_wet_grid[k, :, :],
-                                                           source_row_grid_full, source_row_grid,
-                                                           source_col_grid_full, source_col_grid,
-                                                           source_level_grid_full, source_level_grid,
-                                                           k,mean_vertical_difference)
-
-                # if k<5:
-                #     C = plt.imshow(source_level_grid,origin='lower')
-                #     plt.colorbar(C)
-                #     plt.show()
-
-                # mark the interpolation grid to indicate the variable was spread vertically
-                interpolation_type_grid[np.logical_and(np.logical_and(source_level_grid<k,source_level_grid!=-1),
-                                                       interpolation_type_grid == 0)] = 3
-
-                n_remaining = np.sum(np.logical_and(grid==0,L1_wet_grid[k,:,:]!=0))
-                if printing:
-                    print('                  - Remaining points after downward spread: '+str(n_remaining)+' (check: filled '+str(np.sum(interpolation_type_grid==3))+')')
-
-                # if, for whatever reason, there are still values to be filled, then fill em with the nearest neighbor
-                # if the bathy is already "filled" then this should only pertain to the W and S masks
-                # in other words, this is just used for velocity and maybe it is best to fill these with zeros in weird
-                # near-coastal "holes"
-                if n_remaining > 0 and fill_with_nearest_at_end:
-                    if len(L0_points) > 0:
-
-                        L1_points = np.column_stack([XC_subset.ravel(), YC_subset.ravel()])
-                        interpolation_values = interpolation_type_grid.ravel()
-
-                        filled_L1_points = L1_points[interpolation_values!=0,:]
-                        filled_L1_values = grid.ravel()[interpolation_values!=0]
-                        filled_source_rows = source_row_grid.ravel()[interpolation_values!=0]
-                        filled_source_cols = source_col_grid.ravel()[interpolation_values != 0]
-                        filled_source_levels = source_level_grid.ravel()[interpolation_values != 0]
-                        fill_rows, fill_cols = np.where(np.logical_and(grid == 0, L1_wet_grid[k, :, :] != 0))
-
-                        for ri in range(len(fill_rows)):
-                            dist = ((XC_subset[fill_rows[ri],fill_cols[ri]]-filled_L1_points[:,0])**2 + \
-                                   (YC_subset[fill_rows[ri],fill_cols[ri]]-filled_L1_points[:,1])**2)**0.5
-                            ind = np.where(dist==np.min(dist))[0][0]
-                            grid[fill_rows[ri],fill_cols[ri]] = filled_L1_values[ind]
-                            source_row_grid[fill_rows[ri],fill_cols[ri]] = filled_source_rows[ind]
-                            source_col_grid[fill_rows[ri], fill_cols[ri]] = filled_source_cols[ind]
-                            source_level_grid[fill_rows[ri], fill_cols[ri]] = filled_source_levels[ind]
-
-                    n_remaining = np.sum(np.logical_and(grid == 0, L1_wet_grid[k, :, :] != 0))
-                    if printing:
-                        print('                  - Remaining points after nearest neighbor interpolation: ' + str(n_remaining))
-
-                # # mark the interpolation grid to indicate the variable was spread vertically
-                # interpolation_type_grid[np.logical_and(source_row_grid != -1, interpolation_type_grid == 0)] = 3
-
-
+            # Interpolate using linear or nearest as fallback
+            if len(L0_points) > 4:
+                grid = griddata(L0_points, L0_values, (XC_subset, YC_subset), method='linear', fill_value=0)
+                if not np.any(grid):
+                    grid = griddata(L0_points, L0_values, (XC_subset, YC_subset), method='nearest', fill_value=0)
             else:
-                grid = np.zeros_like(XC_subset).astype(float)
+                grid = np.zeros_like(XC_subset, dtype=float)
 
-        full_grid[k, :, :] = grid[:, :]
-        interpolation_type_grid_full[k,:,:] = interpolation_type_grid
-        source_row_grid_full[k, :, :] = source_row_grid
-        source_col_grid_full[k, :, :] = source_col_grid
-        source_level_grid_full[k, :, :] = source_level_grid
+            # Mask invalid areas
+            grid[L0_wet_grid_on_L1[k] == 0] = 0
+            grid[L1_wet_grid[k] == 0] = 0
+
+            # Track interpolation method
+            interpolation_type_grid = (grid != 0).astype(int)
+
+            # Track source metadata
+            source_row_grid = interpolation_type_grid * Rows
+            source_col_grid = interpolation_type_grid * Cols
+            source_level_grid = interpolation_type_grid * k
+
+            mask_zeros = interpolation_type_grid == 0
+            source_row_grid[mask_zeros] = -1
+            source_col_grid[mask_zeros] = -1
+            source_level_grid[mask_zeros] = -1
+
+            # Horizontal spreading if necessary
+            is_remaining = (grid == 0) & (L1_wet_grid[k] == 1)
+            n_remaining = np.sum(is_remaining)
+            if printing:
+                print(f'   - Remaining points before horizontal spread: {n_remaining}')
+
+            grid, source_row_grid, source_col_grid, source_level_grid, n_remaining = \
+                count_spreading_rows_and_cols_in_wet_grid(grid, source_row_grid, source_col_grid, source_level_grid, L1_wet_grid[k])
+
+            interpolation_type_grid[(source_row_grid != -1) & (interpolation_type_grid == 0)] = 2
+
+            if printing:
+                print(f'   - Remaining points before downward spread: {n_remaining}')
+
+            # Vertical spreading
+            if n_remaining > 0 and fill_downward and k > 0:
+                grid, source_row_grid, source_col_grid, source_level_grid = \
+                    count_spreading_levels_in_wet_grid(full_grid, grid, L1_wet_grid[k],
+                                                       source_row_grid_full, source_row_grid,
+                                                       source_col_grid_full, source_col_grid,
+                                                       source_level_grid_full, source_level_grid,
+                                                       k, mean_vertical_difference)
+
+            interpolation_type_grid[((source_level_grid < k) & (source_level_grid != -1)) & (interpolation_type_grid == 0)] = 3
+
+            # Final fallback: nearest neighbor fill
+            if n_remaining > 0 and fill_with_nearest_at_end:
+                L1_points = np.column_stack([XC_subset.ravel(), YC_subset.ravel()])
+                interp_mask = interpolation_type_grid.ravel() != 0
+
+                filled_points = L1_points[interp_mask]
+                filled_values = grid.ravel()[interp_mask]
+                filled_rows = source_row_grid.ravel()[interp_mask]
+                filled_cols = source_col_grid.ravel()[interp_mask]
+                filled_levels = source_level_grid.ravel()[interp_mask]
+
+                fill_rows, fill_cols = np.where((grid == 0) & (L1_wet_grid[k] != 0))
+                for ri in range(len(fill_rows)):
+                    dists = ((XC_subset[fill_rows[ri], fill_cols[ri]] - filled_points[:, 0])**2 +
+                             (YC_subset[fill_rows[ri], fill_cols[ri]] - filled_points[:, 1])**2) ** 0.5
+                    ind = np.argmin(dists)
+                    grid[fill_rows[ri], fill_cols[ri]] = filled_values[ind]
+                    source_row_grid[fill_rows[ri], fill_cols[ri]] = filled_rows[ind]
+                    source_col_grid[fill_rows[ri], fill_cols[ri]] = filled_cols[ind]
+                    source_level_grid[fill_rows[ri], fill_cols[ri]] = filled_levels[ind]
+
+                n_remaining = np.sum((grid == 0) & (L1_wet_grid[k] != 0))
+                if printing:
+                    print(f'   - Remaining points after nearest neighbor interpolation: {n_remaining}')
+
+        # Save to full grid arrays
+        full_grid[k] = grid
+        interpolation_type_grid_full[k] = interpolation_type_grid
+        source_row_grid_full[k] = source_row_grid
+        source_col_grid_full[k] = source_col_grid
+        source_level_grid_full[k] = source_level_grid
 
     return (interpolation_type_grid_full, source_row_grid_full, source_col_grid_full, source_level_grid_full)
 
 def create_interpolation_grids(ecco_XC, ecco_YC, ecco_wet_cells, ecco_wet_cells_on_tile_domain,
                                XC, YC, domain_wet_cells_3D_C, domain_wet_cells_3D_S, domain_wet_cells_3D_W):
+    """
+    Wrapper function to create interpolation grids for C, S, and W masks.
 
-    # we will try to spread around a full grid of -1s
-    ecco_grid = -1*np.ones_like(ecco_wet_cells)
+    Returns:
+        All interpolation type and source grids for each component
+    """
+    ecco_grid = -1 * np.ones_like(ecco_wet_cells)
 
-    interpolation_type_grid_C, source_row_grid_C, source_col_grid_C, source_level_grid_C, =\
+    # Create interpolation grid for each velocity component (C, S, W)
+    return (
         create_interpolation_grid(ecco_XC, ecco_YC, ecco_grid, ecco_wet_cells, ecco_wet_cells_on_tile_domain,
-                                  XC, YC, domain_wet_cells_3D_C)
-
-    interpolation_type_grid_S, source_row_grid_S, source_col_grid_S, source_level_grid_S, = \
+                                   XC, YC, domain_wet_cells_3D_C),
         create_interpolation_grid(ecco_XC, ecco_YC, ecco_grid, ecco_wet_cells, ecco_wet_cells_on_tile_domain,
-                                  XC, YC, domain_wet_cells_3D_S)
-
-    interpolation_type_grid_W, source_row_grid_W, source_col_grid_W, source_level_grid_W, = \
+                                   XC, YC, domain_wet_cells_3D_S),
         create_interpolation_grid(ecco_XC, ecco_YC, ecco_grid, ecco_wet_cells, ecco_wet_cells_on_tile_domain,
-                                  XC, YC, domain_wet_cells_3D_W)
-
-    return(interpolation_type_grid_C, source_row_grid_C, source_col_grid_C, source_level_grid_C,
-           interpolation_type_grid_S, source_row_grid_S, source_col_grid_S, source_level_grid_S,
-           interpolation_type_grid_W, source_row_grid_W, source_col_grid_W, source_level_grid_W)
+                                   XC, YC, domain_wet_cells_3D_W)
+    )
 
 def write_interpolation_grid_to_nc(config_dir, model_name,
                                    interpolation_type_grid_C, source_row_grid_C, source_col_grid_C, source_level_grid_C,
                                    interpolation_type_grid_S, source_row_grid_S, source_col_grid_S, source_level_grid_S,
                                    interpolation_type_grid_W, source_row_grid_W, source_col_grid_W, source_level_grid_W):
-
-    interpolation_grid_file = model_name + '_interpolation_grid.nc'
+    """
+    Writes the interpolation grids to a NetCDF file grouped by C, S, and W.
+    """
+    interpolation_grid_file = f'{model_name}_interpolation_grid.nc'
     ds = nc4.Dataset(os.path.join(config_dir, 'nc_grids', interpolation_grid_file), 'w')
 
-    grp = ds.createGroup('C')
-    grp.createDimension('levels', np.shape(interpolation_type_grid_C)[0])
-    grp.createDimension('rows', np.shape(interpolation_type_grid_C)[1])
-    grp.createDimension('cols', np.shape(interpolation_type_grid_C)[2])
-    var = grp.createVariable('interp_type', 'i8', ('levels', 'rows', 'cols'))
-    var[:, :, :] = interpolation_type_grid_C
-    var = grp.createVariable('source_rows', 'i8', ('levels', 'rows', 'cols'))
-    var[:, :, :] = source_row_grid_C
-    var = grp.createVariable('source_cols', 'i8', ('levels', 'rows', 'cols'))
-    var[:, :, :] = source_col_grid_C
-    var = grp.createVariable('source_levels', 'i8', ('levels', 'rows', 'cols'))
-    var[:, :, :] = source_level_grid_C
+    for name, itg, srg, scg, slg in zip(['C', 'S', 'W'],
+        [interpolation_type_grid_C, interpolation_type_grid_S, interpolation_type_grid_W],
+        [source_row_grid_C, source_row_grid_S, source_row_grid_W],
+        [source_col_grid_C, source_col_grid_S, source_col_grid_W],
+        [source_level_grid_C, source_level_grid_S, source_level_grid_W]):
 
-    grp = ds.createGroup('S')
-    grp.createDimension('levels', np.shape(interpolation_type_grid_S)[0])
-    grp.createDimension('rows', np.shape(interpolation_type_grid_S)[1])
-    grp.createDimension('cols', np.shape(interpolation_type_grid_S)[2])
-    var = grp.createVariable('interp_type', 'i8', ('levels', 'rows', 'cols'))
-    var[:, :, :] = interpolation_type_grid_S
-    var = grp.createVariable('source_rows', 'i8', ('levels', 'rows', 'cols'))
-    var[:, :, :] = source_row_grid_S
-    var = grp.createVariable('source_cols', 'i8', ('levels', 'rows', 'cols'))
-    var[:, :, :] = source_col_grid_S
-    var = grp.createVariable('source_levels', 'i8', ('levels', 'rows', 'cols'))
-    var[:, :, :] = source_level_grid_S
+        grp = ds.createGroup(name)
+        grp.createDimension('levels', itg.shape[0])
+        grp.createDimension('rows', itg.shape[1])
+        grp.createDimension('cols', itg.shape[2])
 
-    grp = ds.createGroup('W')
-    grp.createDimension('levels', np.shape(interpolation_type_grid_W)[0])
-    grp.createDimension('rows', np.shape(interpolation_type_grid_W)[1])
-    grp.createDimension('cols', np.shape(interpolation_type_grid_W)[2])
-    var = grp.createVariable('interp_type', 'i8', ('levels', 'rows', 'cols'))
-    var[:, :, :] = interpolation_type_grid_W
-    var = grp.createVariable('source_rows', 'i8', ('levels', 'rows', 'cols'))
-    var[:, :, :] = source_row_grid_W
-    var = grp.createVariable('source_cols', 'i8', ('levels', 'rows', 'cols'))
-    var[:, :, :] = source_col_grid_W
-    var = grp.createVariable('source_levels', 'i8', ('levels', 'rows', 'cols'))
-    var[:, :, :] = source_level_grid_W
+        grp.createVariable('interp_type', 'i8', ('levels', 'rows', 'cols'))[:, :, :] = itg
+        grp.createVariable('source_rows', 'i8', ('levels', 'rows', 'cols'))[:, :, :] = srg
+        grp.createVariable('source_cols', 'i8', ('levels', 'rows', 'cols'))[:, :, :] = scg
+        grp.createVariable('source_levels', 'i8', ('levels', 'rows', 'cols'))[:, :, :] = slg
 
     ds.close()

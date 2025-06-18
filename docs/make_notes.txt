@@ -8,3 +8,5 @@ If you need to start over completely, then use
 sphinx-quickstart
 
 Note that it will make a fresh conf.py file and index.rst file. These have been modified so store a copy somewhere before running the quickstart command.
+
+Edit the files in the source directory

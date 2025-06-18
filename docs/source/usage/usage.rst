@@ -7,9 +7,9 @@ Usage
 Installation
 ------------
 
-At this time, **eccoseas** is not yet available via public pip or conda.
+To use **eccoseas**, you can use pip to install it into you environment.
 
-To use **eccoseas**, you can first clone the repository to your local drive:
+If you'd like eccoseas on your local machine, first clone the repository to your local drive:
 
 .. code-block:: console
 

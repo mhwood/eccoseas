@@ -2,7 +2,9 @@
 import os
 import numpy as np
 from scipy.interpolate import griddata, interp1d
-import torch
+#import torch
+from numba import njit, prange
+from scipy.spatial import Delaunay
 
 ###############################################################################################
 # Spreading routines
@@ -57,7 +59,78 @@ def spread_var_horizontally_in_wet_grid_legacy(var_grid, wet_grid):
 
     return var_grid, n_remaining
 
-def spread_var_horizontally_in_wet_grid(var_grid_np, wet_grid_np):
+
+@njit(parallel=True)
+def spread_var_horizontally_in_wet_grid(var_grid, wet_grid):
+    var_grid = var_grid.astype(np.float32)
+    wet_grid = wet_grid.astype(np.uint8)
+
+    H, W = var_grid.shape
+
+    # Flatten coordinate grids
+    total = H * W
+    Rows = np.empty(total, dtype=np.int32)
+    Cols = np.empty(total, dtype=np.int32)
+    for i in range(H):
+        for j in range(W):
+            idx = i * W + j
+            Rows[idx] = i
+            Cols[idx] = j
+
+    # Initial remaining mask
+    is_remaining = (var_grid == 0) & (wet_grid == 1)
+    n_remaining = np.sum(is_remaining)
+    continue_iter = True
+
+    while continue_iter:
+        # Flatten wet_mask and get flat indices
+        wet_mask = (wet_grid == 1).flatten()
+        val_mask = (var_grid.flatten() != 0) & wet_mask
+        idxs = np.where(val_mask)[0]
+
+        if idxs.size == 0:
+            break
+
+        Wet_Rows = Rows[idxs]
+        Wet_Cols = Cols[idxs]
+        Wet_Vals = var_grid.flatten()[idxs]
+
+        rem_rows, rem_cols = np.where((var_grid == 0) & (wet_grid == 1))
+        n_rem = rem_rows.shape[0]
+
+        if n_rem == 0:
+            break
+
+        # Parallel loop over all remaining cells
+        for idx in prange(n_rem):
+            r = rem_rows[idx]
+            c = rem_cols[idx]
+            min_dist = 1e6
+            min_val = 0.0
+
+            for j in range(Wet_Vals.size):
+                dr = float(Wet_Rows[j]) - r
+                dc = float(Wet_Cols[j]) - c
+                dist = (dr * dr + dc * dc) ** 0.5
+                if dist < min_dist:
+                    min_dist = dist
+                    min_val = Wet_Vals[j]
+
+            if min_dist < 2 ** 0.5:
+                var_grid[r, c] = min_val
+
+        # Recompute remaining
+        is_remaining_new = (var_grid == 0) & (wet_grid == 1)
+        n_remaining_new = np.sum(is_remaining_new)
+
+        if n_remaining_new < n_remaining:
+            n_remaining = n_remaining_new
+        else:
+            continue_iter = False
+
+    return var_grid, n_remaining
+
+def spread_var_horizontally_in_wet_grid_torch(var_grid_np, wet_grid_np):
     """
     GPU-accelerated version of horizontal spreading using PyTorch.
     Fills zero cells in var_grid_np by copying nearest valid values from neighboring wet cells.
@@ -221,37 +294,62 @@ def downscale_2D_points_with_zeros(L0_points, L0_var, L0_wet_grid,
 
     return grid
 
-def downscale_exf_field(L0_points, L0_values, L0_wet_grid,
-                         XC_subset, YC_subset, L1_wet_grid,
-                         remove_zeros=True):
+def downscale_exf_field(L0_points, exf_grid,
+                        XC_subset, YC_subset, L1_wet_grid, tri=None, printing=False):
     """
-    Interpolates a forcing field to a fine grid using linear interpolation with optional zero removal.
+    Interpolates a forcing field to a fine grid using Delaunay-based linear interpolation.
 
     Parameters:
-        L0_points (ndarray): Coordinates of the original data.
-        L0_values (ndarray): Corresponding values.
+        L0_points (ndarray): Coordinates of the original data (n_points, 2).
+        L0_values (ndarray): Corresponding values (n_points,).
         L0_wet_grid (ndarray): Wet mask for the original field.
         XC_subset, YC_subset (ndarray): Target grid coordinates.
         L1_wet_grid (ndarray): Wet mask on the fine grid.
-        remove_zeros (bool): If True, zero values are excluded from interpolation.
 
     Returns:
         ndarray: Interpolated field with invalid regions masked.
     """
-    L0_points = L0_points[L0_wet_grid != 0, :]
-    L0_values = L0_values[L0_wet_grid != 0]
 
-    if remove_zeros:
-        L0_points = L0_points[L0_values != 0, :]
-        L0_values = L0_values[L0_values != 0]
+    def interpolate_timestep(L0_values, vertices, bary_coords):
+        # Perform interpolation
+        interpolated = np.zeros(query_points.shape[0], dtype=float)
+        interpolated[valid] = np.einsum('ij,ij->i', L0_values[vertices], bary_coords)
+        # Reshape
+        grid = interpolated.reshape(XC_subset.shape)
+        return(grid)
 
-    if len(L0_points) > 4:
-        grid = griddata(L0_points, L0_values, (XC_subset, YC_subset), method='linear', fill_value=0)
-    else:
-        grid = np.zeros((np.shape(XC_subset))).astype(float)
+    # Compute triangulation only if not provided
+    if tri is None:
+        if printing:
+            print('       - Computing the Delunay triangulation for interpolation')
+        tri = Delaunay(L0_points)
 
-    grid[L1_wet_grid == 0] = 0
-    return grid
+    # create a grid of zeros to fill in
+    interpolated_grid = np.zeros((np.shape(exf_grid)[0], np.shape(XC_subset)[0], np.shape(XC_subset)[1]))
+
+    # Prepare query points
+    query_points = np.vstack([XC_subset.ravel(), YC_subset.ravel()]).T
+    simplices = tri.find_simplex(query_points)
+    valid = simplices >= 0
+
+    # Get simplex vertex indices and transform matrices
+    vertices = tri.simplices[simplices[valid]]
+    T = tri.transform[simplices[valid], :2]
+    delta = query_points[valid] - tri.transform[simplices[valid], 2]
+    bary = np.einsum('ijk,ik->ij', T, delta)
+    bary_coords = np.c_[bary, 1 - bary.sum(axis=1)]
+
+    # loop through the timesteps and apply the interpolation
+    for i in range(np.shape(interpolated_grid)[0]):
+        if printing:
+            if i%100==0:
+                print('       - Working on timestep '+str(i)+' of '+str(np.shape(interpolated_grid)[0]))
+        ecco_values = exf_grid[i, :, :].ravel()
+        timestep_grid = interpolate_timestep(ecco_values, vertices, bary_coords)
+        timestep_grid[L1_wet_grid==0]=0
+        interpolated_grid[i,:,:] = timestep_grid
+
+    return interpolated_grid, tri
 
 ###############################################################################################
 # 3D routines

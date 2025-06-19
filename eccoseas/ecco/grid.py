@@ -4,67 +4,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 import netCDF4 as nc4
 
-def read_ecco_field_to_faces(file_path, llc, dim, Nr=50):
-
-    grid_array = np.fromfile(file_path,'>f4')
-    N = 13*llc*llc
-
-    field_faces = {}
-
-    if dim == 2:
-        points_counted = 0
-        for i in range(1, 6):
-            if i < 3:
-                n_points = 3 * llc * llc
-                grid = grid_array[points_counted:points_counted + n_points]
-                grid = np.reshape(grid, (3 * llc, llc))
-            if i == 3:
-                n_points = llc * llc
-                grid = grid_array[points_counted:points_counted + n_points]
-                grid = np.reshape(grid, (llc, llc))
-            if i > 3:
-                n_points = 3 * llc * llc
-                grid = grid_array[points_counted:points_counted + n_points]
-                grid = np.reshape(grid, (llc, 3 * llc))
-            field_faces[i] = grid
-            points_counted += n_points
-
-    if dim==3:
-
-        for i in range(1, 6):
-            if i < 3:
-                face_grid = np.zeros((Nr, 3 * llc, llc))
-            elif i == 3:
-                face_grid = np.zeros((Nr, llc, llc))
-            if i > 3:
-                face_grid = np.zeros((Nr, llc, 3 * llc))
-            field_faces[i]=face_grid
-
-        for nr in range(Nr):
-            points_counted = 0
-            level_grid = grid_array[nr * N:(nr + 1) * N]
-            for i in range(1,6):
-                if i < 3:
-                    n_points = 3*llc*llc
-                    grid = level_grid[points_counted:points_counted+n_points]
-                    grid = np.reshape(grid,(3*llc,llc))
-                if i == 3:
-                    n_points = llc * llc
-                    grid = level_grid[points_counted:points_counted + n_points]
-                    grid = np.reshape(grid, (llc, llc))
-                if i > 3:
-                    n_points = 3 * llc * llc
-                    grid = level_grid[points_counted:points_counted + n_points]
-                    grid = np.reshape(grid, (llc, 3*llc))
-                field_faces[i][nr,:,:] = grid
-
-                points_counted += n_points
-
-        # plt.imshow(grid,origin='lower')
-        # plt.show()
-
-    return(field_faces)
-
 def ecco_faces_to_tiles(ecco_faces, llc, dim):
     ecco_tiles = {}
     if dim==2:
@@ -96,54 +35,6 @@ def ecco_faces_to_tiles(ecco_faces, llc, dim):
         ecco_tiles[12] = ecco_faces[5][:, :, llc:2*llc]
         ecco_tiles[13] = ecco_faces[5][:, :, 2*llc:]
     return(ecco_tiles)
-
-def read_ecco_grid_tiles_from_nc(grid_dir, var_name):
-    ecco_tiles = {}
-
-    for tile_number in range(1,14):
-        ds = nc4.Dataset(os.path.join(grid_dir,'GRID.'+'{:04d}'.format(tile_number)+'.nc'))
-        if var_name in ['hFacC','hFacS','hFacW']:
-            grid = ds.variables[var_name][:, :, :]
-        elif var_name in ['DRC','DRF','RC','RF']:
-            grid = ds.variables[var_name][:]
-        else:
-            grid = ds.variables[var_name][:, :]
-        ds.close()
-        ecco_tiles[tile_number] = np.array(grid)
-    return(ecco_tiles)
-
-def read_ecco_geometry_to_faces(ecco_dir,llc):
-
-    XC_faces = {}
-    YC_faces = {}
-    for i in [1, 2, 3, 4, 5]:
-        if i < 3:
-            grid = np.fromfile(os.path.join(ecco_dir, 'tile00' + str(i) + '.mitgrid'), '>f8')
-            grid = np.reshape(grid, (16, 3 * llc+1, llc+1))
-        if i == 3:
-            grid = np.fromfile(os.path.join(ecco_dir, 'tile00' + str(i) + '.mitgrid'), '>f8')
-            grid = np.reshape(grid, (16, llc+1, llc+1))
-        if i > 3:
-            grid = np.fromfile(os.path.join(ecco_dir, 'tile00' + str(i) + '.mitgrid'), '>f8')
-            grid = np.reshape(grid, (16, llc+1, 3 * llc+1))
-        XC_face = grid[0,:-1,:-1]
-        YC_face = grid[1,:-1,:-1]
-        XC_faces[i] = XC_face
-        YC_faces[i] = YC_face
-
-    angleCS_path = os.path.join(ecco_dir,'AngleCS.data')
-    AngleCS_faces = read_ecco_field_to_faces(angleCS_path, llc, dim=2)
-
-    angleSN_path = os.path.join(ecco_dir,'AngleSN.data')
-    AngleSN_faces = read_ecco_field_to_faces(angleSN_path, llc, dim=2)
-
-    hFacC_path = os.path.join(ecco_dir, 'hFacC.data')
-    hFacC_faces = read_ecco_field_to_faces(hFacC_path, llc, dim=3)
-
-    # plt.imshow(hFacC_faces[5][5,:,:])
-    # plt.show()
-
-    return(XC_faces, YC_faces, AngleCS_faces, AngleSN_faces, hFacC_faces)
 
 def ecco_tile_face_row_col_bounds(tile_number, llc, sNx, sNy):
 
@@ -279,7 +170,7 @@ def read_ecco_pickup_to_stiched_grid(pickup_file_path,ordered_ecco_tiles,ordered
 
     return(var_names, var_grids, global_metadata)
 
-def rotate_ecco_grids_to_natural_grids(var_names, var_grids, ecco_AngleCS, ecco_AngleSN):
+def rotate_ecco_pickup_grids_to_natural_grids(var_names, var_grids, ecco_AngleCS, ecco_AngleSN):
 
     def rotate_velocity_vectors_to_natural(angle_cos, angle_sin, uvel, vvel):
         zonal_velocity = np.zeros_like(uvel)
@@ -306,6 +197,32 @@ def rotate_ecco_grids_to_natural_grids(var_names, var_grids, ecco_AngleCS, ecco_
     natural_gunm2_grid, natural_gvnm2_grid = rotate_velocity_vectors_to_natural(ecco_AngleCS, ecco_AngleSN, gunm2_grid, gvnm2_grid)
     var_grids[var_names.index('GuNm2')] = natural_gunm2_grid
     var_grids[var_names.index('GvNm2')] = natural_gvnm2_grid
+
+    return(var_grids)
+
+def rotate_ecco_vel_grids_to_natural_grids(var_names, var_grids, ecco_AngleCS, ecco_AngleSN):
+
+    def rotate_velocity_vectors_to_natural(angle_cos, angle_sin, uvel, vvel):
+        zonal_velocity = np.zeros_like(uvel)
+        meridional_velocity = np.zeros_like(vvel)
+        for k in range(np.shape(uvel)[0]):
+            zonal_velocity[k,:,:] = angle_cos * uvel[k,:,:] - angle_sin * vvel[k,:,:]
+            meridional_velocity[k,:,:] = angle_sin * uvel[k,:,:] + angle_cos * vvel[k,:,:]
+        return (zonal_velocity, meridional_velocity)
+
+    if 'Uvel' in var_names and 'Vvel' in var_names:
+        uvel_grid = var_grids[var_names.index('Uvel')]
+        vvel_grid = var_grids[var_names.index('Vvel')]
+        natural_uvel_grid, natural_vvel_grid = rotate_velocity_vectors_to_natural(ecco_AngleCS, ecco_AngleSN, uvel_grid, vvel_grid)
+        var_grids[var_names.index('Uvel')] = natural_uvel_grid
+        var_grids[var_names.index('Vvel')] = natural_vvel_grid
+
+    if 'SIuice' in var_names and 'SIvice' in var_names:
+        siuice_grid = var_grids[var_names.index('SIuice')]
+        sivice_grid = var_grids[var_names.index('SIvice')]
+        natural_siuice_grid, natural_sivice_grid = rotate_velocity_vectors_to_natural(ecco_AngleCS, ecco_AngleSN, siuice_grid, sivice_grid)
+        var_grids[var_names.index('SIuice')] = natural_siuice_grid
+        var_grids[var_names.index('SIvice')] = natural_sivice_grid
 
     return(var_grids)
 

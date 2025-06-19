@@ -2,6 +2,10 @@
 Usage
 =====
 
+The usage notes here provide instructions for the installation of the Python package. Use the 
+Utilities tab to explore the different modules and functions of the package, and the various regional 
+model examples to see the functions in action.
+
 .. _installation:
 
 Installation
@@ -28,3 +32,24 @@ Alternatively, you can install it directly from Github with
 .. code-block:: console
 
    pip install git+https://github.com/mhwood/eccoseas.git
+
+Requirements
+------------
+
+The following packages are required for **eccoseas**
+
+.. code-block:: console
+
+   numpy
+   netCDF4
+   scipy
+   pyproj
+
+In addition, if you'd like to follow along with the regional model examples in this 
+documentation, then the following packages are necessary:
+
+.. code-block:: console
+   
+   matplotlib
+   cartopy
+   cmocean

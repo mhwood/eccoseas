@@ -31,8 +31,8 @@ fraction (`hFacMin`). These masks are crucial for interpolating from coarse reso
 resolution grids in which the wet and dry cells may differ. Note that these functions may not reproduce
 the exact hFac fields as MITgcm due to rounding difference between Python and FORTRAN.
 
-horizonal
-^^^^^^^^^
+horizontal
+^^^^^^^^^^
 This module provides a toolkit for spatial interpolation and value propagation across 
 geophysical grids, particularly focused on handling wet (oceanic or fluid) regions. It includes legacy 
 and optimized implementations for horizontally spreading variable values into wet cells using 

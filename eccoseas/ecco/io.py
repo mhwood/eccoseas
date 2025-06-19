@@ -1,7 +1,6 @@
 
 import os
 import numpy as np
-import matplotlib.pyplot as plt
 import netCDF4 as nc4
 
 
@@ -94,3 +93,51 @@ def read_ecco_faces_to_tiles(ecco_faces, llc, dim):
         ecco_tiles[12] = ecco_faces[5][:, :, llc:2*llc]
         ecco_tiles[13] = ecco_faces[5][:, :, 2*llc:]
     return(ecco_tiles)
+
+def read_ecco_grid_tiles_from_nc(grid_dir, var_name):
+    ecco_tiles = {}
+
+    for tile_number in range(1,14):
+        ds = nc4.Dataset(os.path.join(grid_dir,'GRID.'+'{:04d}'.format(tile_number)+'.nc'))
+        if var_name in ['hFacC','hFacS','hFacW']:
+            grid = ds.variables[var_name][:, :, :]
+        elif var_name in ['DRC','DRF','RC','RF']:
+            grid = ds.variables[var_name][:]
+        else:
+            grid = ds.variables[var_name][:, :]
+        ds.close()
+        ecco_tiles[tile_number] = np.array(grid)
+    return(ecco_tiles)
+
+def read_ecco_geometry_to_faces(ecco_dir,llc):
+
+    XC_faces = {}
+    YC_faces = {}
+    for i in [1, 2, 3, 4, 5]:
+        if i < 3:
+            grid = np.fromfile(os.path.join(ecco_dir, 'tile00' + str(i) + '.mitgrid'), '>f8')
+            grid = np.reshape(grid, (16, 3 * llc+1, llc+1))
+        if i == 3:
+            grid = np.fromfile(os.path.join(ecco_dir, 'tile00' + str(i) + '.mitgrid'), '>f8')
+            grid = np.reshape(grid, (16, llc+1, llc+1))
+        if i > 3:
+            grid = np.fromfile(os.path.join(ecco_dir, 'tile00' + str(i) + '.mitgrid'), '>f8')
+            grid = np.reshape(grid, (16, llc+1, 3 * llc+1))
+        XC_face = grid[0,:-1,:-1]
+        YC_face = grid[1,:-1,:-1]
+        XC_faces[i] = XC_face
+        YC_faces[i] = YC_face
+
+    angleCS_path = os.path.join(ecco_dir,'AngleCS.data')
+    AngleCS_faces = read_ecco_field_to_faces(angleCS_path, llc, dim=2)
+
+    angleSN_path = os.path.join(ecco_dir,'AngleSN.data')
+    AngleSN_faces = read_ecco_field_to_faces(angleSN_path, llc, dim=2)
+
+    hFacC_path = os.path.join(ecco_dir, 'hFacC.data')
+    hFacC_faces = read_ecco_field_to_faces(hFacC_path, llc, dim=3)
+
+    # plt.imshow(hFacC_faces[5][5,:,:])
+    # plt.show()
+
+    return(XC_faces, YC_faces, AngleCS_faces, AngleSN_faces, hFacC_faces)

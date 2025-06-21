@@ -1,7 +1,6 @@
 
 import os
 import numpy as np
-import matplotlib.pyplot as plt
 import netCDF4 as nc4
 
 def ecco_faces_to_tiles(ecco_faces, llc, dim):
@@ -200,29 +199,30 @@ def rotate_ecco_pickup_grids_to_natural_grids(var_names, var_grids, ecco_AngleCS
 
     return(var_grids)
 
-def rotate_ecco_vel_grids_to_natural_grids(var_names, var_grids, ecco_AngleCS, ecco_AngleSN):
+def rotate_ecco_vel_grids_to_natural_grids(uvel, vvel, ecco_AngleCS, ecco_AngleSN, has_depth=True):
 
-    def rotate_velocity_vectors_to_natural(angle_cos, angle_sin, uvel, vvel):
-        zonal_velocity = np.zeros_like(uvel)
-        meridional_velocity = np.zeros_like(vvel)
+    zonal_velocity = np.zeros_like(uvel)
+    meridional_velocity = np.zeros_like(vvel)
+    if has_depth:
         for k in range(np.shape(uvel)[0]):
-            zonal_velocity[k,:,:] = angle_cos * uvel[k,:,:] - angle_sin * vvel[k,:,:]
-            meridional_velocity[k,:,:] = angle_sin * uvel[k,:,:] + angle_cos * vvel[k,:,:]
-        return (zonal_velocity, meridional_velocity)
+            zonal_velocity[k,:,:] = ecco_AngleCS * uvel[k,:,:] - ecco_AngleSN * vvel[k]
+            meridional_velocity[k,:,:] = ecco_AngleSN * uvel[k,:,:] + ecco_AngleCS * vvel[k]
+    else:
+        zonal_velocity = ecco_AngleCS * uvel - ecco_AngleSN * vvel
+        meridional_velocity = ecco_AngleSN * uvel + ecco_AngleCS * vvel
 
-    if 'Uvel' in var_names and 'Vvel' in var_names:
-        uvel_grid = var_grids[var_names.index('Uvel')]
-        vvel_grid = var_grids[var_names.index('Vvel')]
-        natural_uvel_grid, natural_vvel_grid = rotate_velocity_vectors_to_natural(ecco_AngleCS, ecco_AngleSN, uvel_grid, vvel_grid)
-        var_grids[var_names.index('Uvel')] = natural_uvel_grid
-        var_grids[var_names.index('Vvel')] = natural_vvel_grid
+    return(zonal_velocity, meridional_velocity)
 
-    if 'SIuice' in var_names and 'SIvice' in var_names:
-        siuice_grid = var_grids[var_names.index('SIuice')]
-        sivice_grid = var_grids[var_names.index('SIvice')]
-        natural_siuice_grid, natural_sivice_grid = rotate_velocity_vectors_to_natural(ecco_AngleCS, ecco_AngleSN, siuice_grid, sivice_grid)
-        var_grids[var_names.index('SIuice')] = natural_siuice_grid
-        var_grids[var_names.index('SIvice')] = natural_sivice_grid
+def rotate_vel_grids_to_domain(zonal_vel, meridional_vel, AngleCS, AngleSN, has_depth=True):
 
-    return(var_grids)
+    uvel = np.zeros_like(zonal_vel)
+    vvel = np.zeros_like(meridional_vel)
+    if has_depth:
+        for k in range(np.shape(zonal_vel)[0]):
+            uvel[k,:,:] = AngleCS * zonal_vel[k,:,:] + AngleSN * meridional_vel[k,:,:]
+            vvel[k,:,:] = -AngleSN * zonal_vel[k,:,:] + AngleCS * meridional_vel[k,:,:]
+    else:
+        uvel = AngleCS * zonal_vel + AngleSN * meridional_vel
+        vvel = -AngleSN * zonal_vel + AngleCS * meridional_vel
 
+    return(uvel, vvel)

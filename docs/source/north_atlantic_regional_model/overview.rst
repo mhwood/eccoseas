@@ -3,7 +3,10 @@ North Atlantic Regional Model
 
 Overview
 ========
-This is a description of the North Atlantic model.
+This regional model is constructed in the North Atlantic Ocean and encompasses the North 
+Atlantic current and the ocean around the Greenland Ice Sheet. This model is constructed to run during the 
+entirety of the time period covered by the publicly-available output from the  ECCO Version 5 Alpha State
+Estimate i.e. 1992 through 2017. The domain of the regional model is shown in the following plot:
 
 The domain of the regional model is shown in the following plot:
 
@@ -11,18 +14,22 @@ The domain of the regional model is shown in the following plot:
   :width: 400
   :alt: Bathymetry of the North Atlantic regional model
 
-The construction of this model showcases additional components of the eccoseas
-package in the downscale and ecco modules, specifically those pertaining to sea ice.
+As we can see in this domain, this model is build on a curvilinear grid rather than a regular
+rectangular grid. As a result, vector quanties such as water velocity need to be interpolated onto
+the curvilinear grid rather than provided in zonal and meridional directions. Further, this region
+of the ocean has sea ice.
 
-The functions used in this demo include the tasks in the following list:
+The construction of this model showcases additional components of the **eccoseas**
+package in the *downscale* and *ecco* modules pertaining to vector rotations
+and working with sea ice variables.
 
-1. Reading ECCO Version 5 seaice output fields
-5. Reading and writing sea ice fields
+Required ECCO Data
+^^^^^^^^^^^^^^^^^^
 
 For this example, the following list of files are required from the ECCO Version 5 Alpha State estimate. These
 files are available on the `ECCO drive <https://ecco.jpl.nasa.gov/drive/>`_.
 
-.. list-table:: ECCO files required to construct the California regional model
+.. list-table:: ECCO files required to construct the North Atlantic regional model
    :widths: 50 50
    :header-rows: 1
 
@@ -38,6 +45,16 @@ files are available on the `ECCO drive <https://ecco.jpl.nasa.gov/drive/>`_.
      - VVELMASS_2007.nc to VVELMASS_2017.nc
    * - Sea Surface Height Anomaly
      - ETAN_1992.nc
+   * - Sea ice concentration
+     - SIarea_1992.nc
+   * - Sea ice effective thickness
+     - SIheff_1992.nc
+   * - Snow thickness on sea ice
+     - SIhsnow_1992.nc
+   * - u-Component of sea ice velocity
+     - SIuice_1992.nc
+   * - v-Component of sea ice velocity
+     - SIvice_1992.nc
    * - Lowngwave Downwelling Radiation
      - EIG_dlw_plus_ECCO_v4r1_ctrl (1992-2017)
    * - Shortwave Downwelling Radiation

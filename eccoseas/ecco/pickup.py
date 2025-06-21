@@ -3,7 +3,7 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 import netCDF4 as nc4
-from eccoseas.ecco import grid
+from eccoseas.ecco import io
 
 #################################################################################################
 # pickup functions
@@ -93,8 +93,8 @@ def read_ecco_pickup_file_to_faces(pickup_file_path, llc, Nr=50, verbose=False):
         print('      Reading from '+pickup_file_path)
 
     global_metadata = read_pickup_metadata(pickup_file_path+'.meta')
-    global_data_faces = grid.read_ecco_field_to_faces(pickup_file_path+'.data', llc=llc, dim=3,
-                                                      Nr=global_metadata['nrecords'])
+    global_data_faces = io.read_ecco_field_to_faces(pickup_file_path+'.data', llc=llc, dim=3,
+                                                      Nr=global_metadata['nrecords'], dtype='>f8')
 
     has_Nr = {'uvel': True, 'vvel': True, 'theta': True,
               'salt': True, 'gunm1': True, 'gvnm1': True,
@@ -116,6 +116,44 @@ def read_ecco_pickup_file_to_faces(pickup_file_path, llc, Nr=50, verbose=False):
         start_row=end_row
 
     return(var_grid_faces, global_metadata)
+
+def write_mitgcm_pickup_file(output_file_path, pickup_grid, metadata, dtype='>f8'):
+
+    if output_file_path.endswith('.data'):
+        raise ValueError('Pickup file path should not end with .data (omit extension)')
+    if output_file_path.endswith('.meta'):
+        raise ValueError('Pickup file path should not end with .meta (omit extension)')
+
+    # output the data subset
+    pickup_grid.ravel(order='C').astype(dtype).tofile(output_file_path + '.data')
+
+    # output the metadata file
+    output = " nDims = [   " + str(metadata['nDims']) + " ];\n"
+    output += " dimList = [\n"
+    output += " " + "{:5d}".format(np.shape(pickup_grid)[2]) + ",    1," + "{:5d}".format(
+        np.shape(pickup_grid)[2]) + ",\n"
+    output += " " + "{:5d}".format(np.shape(pickup_grid)[1]) + ",    1," + "{:5d}".format(
+        np.shape(pickup_grid)[1]) + "\n"
+    output += " ];\n"
+    output += " dataprec = [ '" + metadata['dataprec'] + "' ];\n"
+    output += " nrecords = [   " + str(metadata['nrecords']) + " ];\n"
+    output += " timeStepNumber = [ " + "{:10d}".format(metadata['timeStepNumber']) + " ];\n"
+    time_interval_exponent = int(np.log10(metadata['timeInterval']))
+    time_interval_base = metadata['timeInterval'] / (10 ** time_interval_exponent)
+    output += " timeInterval = [  " + "{:.12f}".format(time_interval_base) + "E+" + "{:02d}".format(
+        time_interval_exponent) + " ];\n"
+    output += " nFlds = [   " + str(metadata['nFlds']) + " ];\n"
+    output += " fldList = {\n "
+    for var_name in metadata['fldList']:
+        output += "'" + var_name
+        for i in range(8 - len(var_name)):
+            output += " "
+        output += "' "
+    output += "\n };"
+
+    f = open(output_file_path + '.meta', 'w')
+    f.write(output)
+    f.close()
 
 #################################################################################################
 # seaice pickup functions

@@ -9,7 +9,39 @@ from scipy.spatial import Delaunay
 ###############################################################################################
 # Spreading routines
 
-def spread_var_horizontally_in_wet_grid_legacy(var_grid, wet_grid):
+def spread_var_vertically_in_wet_grid(full_grid, level_grid, wet_grid, level, mean_vertical_difference):
+    """
+    Spreads values from a given depth level vertically downward into wet grid cells where no data exists.
+
+    Parameters:
+    - full_grid (ndarray): The full variable grid from which to source values.
+    - level_grid (ndarray): The grid to be filled at the current level.
+    - wet_grid (ndarray): Mask indicating wet points (1 = wet, 0 = dry).
+    - level (int): Current level (must be > 0).
+    - mean_vertical_difference (float): Constant to add while copying downward.
+
+    Returns:
+    - level_grid (ndarray): The updated grid with missing values filled vertically.
+    """
+
+    if level == 0:
+        bad_row, bad_col = np.where(np.logical_and(level_grid == 0, wet_grid == 1))
+        raise ValueError(
+            'Cannot spread vertically in the surface layer e.g. at row=' + str(bad_row[0]) + ', col=' + str(bad_col[0]))
+
+    # Identify locations that are wet but uninitialized in level_grid
+    is_remaining = np.logical_and(level_grid == 0, wet_grid == 1)
+    rows_remaining, cols_remaining = np.where(is_remaining)
+
+    for ri in range(len(rows_remaining)):
+        row = rows_remaining[ri]
+        col = cols_remaining[ri]
+        # Fill the level grid by copying from one level above and adding a vertical offset
+        level_grid[row, col] = full_grid[level - 1, row, col] + mean_vertical_difference
+
+    return level_grid
+
+def spread_var_horizontally_in_wet_grid_legacy(var_grid, wet_grid, verbose=False):
     """
     Fill zero values in var_grid using the nearest non-zero neighbors within wet areas.
     Legacy implementation using NumPy.
@@ -30,6 +62,9 @@ def spread_var_horizontally_in_wet_grid_legacy(var_grid, wet_grid):
     continue_iter = True
 
     for _ in range(n_remaining):
+        if verbose:
+            if n_remaining>0:
+                print(f"         - Remaining cells to fill: {n_remaining}")
         if continue_iter:
             Wet_Rows = Rows[wet_grid == 1]
             Wet_Cols = Cols[wet_grid == 1]
@@ -58,7 +93,6 @@ def spread_var_horizontally_in_wet_grid_legacy(var_grid, wet_grid):
                 continue_iter = False
 
     return var_grid, n_remaining
-
 
 @njit(parallel=True)
 def spread_var_horizontally_in_wet_grid(var_grid, wet_grid):
@@ -596,9 +630,10 @@ def downscale_3D_field_with_zeros(L0_XC, L0_YC, L0_var, L0_wet_grid, L0_wet_grid
     return(full_grid)
 
 def downscale_3D_points(L0_points, L0_var, L0_wet_grid,
-                        XC_subset, YC_subset, L1_wet_grid,
+                        XC_subset, YC_subset, L1_wet_grid, L0_wet_grid_on_L1=None,
                         mean_vertical_difference=0,fill_downward=True,
-                        printing=False,remove_zeros=True, testing=False):
+                        printing=False, remove_zeros=True, testing=False,
+                        use_legacy=False, verbose=False):
 
     # full_grid = np.zeros_like(L1_wet_grid).astype(float)
     full_grid = np.zeros((np.shape(L1_wet_grid)[0],np.shape(XC_subset)[0],np.shape(XC_subset)[1]))
@@ -643,13 +678,17 @@ def downscale_3D_points(L0_points, L0_var, L0_wet_grid,
                 #     plt.show()
 
                 # mask out any values which should be 0'd based on the old bathy
-                #grid[L0_wet_grid_on_L1[k, :, :] == 0] = 0
+                if L0_wet_grid_on_L1 is not None:
+                    grid[L0_wet_grid_on_L1[k, :, :] == 0] = 0
 
                 # mask out any values which should be 0'd based on the new bathy
                 grid[L1_wet_grid[k, :, :] == 0] = 0
 
-                # spread the the variable outward to new wet cells
-                grid, n_remaining = spread_var_horizontally_in_wet_grid(grid, L1_wet_grid[k, :, :])
+                # spread the variable outward to new wet cells
+                if not use_legacy:
+                    grid, n_remaining = spread_var_horizontally_in_wet_grid(grid, L1_wet_grid[k, :, :])
+                else:
+                    grid, n_remaining = spread_var_horizontally_in_wet_grid_legacy(grid, L1_wet_grid[k, :, :], verbose=verbose)
 
                 # if there are still values which need to be filled, spread downward
                 if n_remaining > 0 and fill_downward and k>0:

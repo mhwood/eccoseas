@@ -3,7 +3,7 @@ California Regional Model
 
 Overview
 ========
-The regional model is constructed in the eastern Pacific Ocean and encompasses most of the 
+This regional model is constructed in the eastern Pacific Ocean and encompasses most of the 
 California current region. This model is constructed to run during the year 2008 and 
 is initiated and forced with output from the ECCO Version 5 Alpha State Estimate. The 
 domain of the regional model is shown in the following plot:

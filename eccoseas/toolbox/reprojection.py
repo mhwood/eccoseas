@@ -44,6 +44,9 @@ def reproject_polygon(polygon_array, inputCRS, outputCRS, x_column=0, y_column=1
     elif str(inputCRS).startswith('326') and outputCRS == 3413:
         # UTM to Polar Stereographic projection, also needs (lat, lon) input order
         x2, y2 = transformer.transform(polygon_array[:, y_column], polygon_array[:, x_column])
+    elif inputCRS == 4326 and str(outputCRS).startswith('326'):
+        # UTM to Polar Stereographic projection, also needs (lat, lon) input order
+        x2, y2 = transformer.transform(polygon_array[:, y_column], polygon_array[:, x_column])
     else:
         # Fail fast if the transformation pair is not explicitly tested
         raise ValueError('Reprojection with this EPSG pair is not safe - no test for validity has been implemented.')

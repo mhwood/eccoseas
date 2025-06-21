@@ -214,35 +214,3 @@ def interpolate_var_points_timeseries_to_new_depth_levels(var_points, wet_points
 
     return new_var_points, new_wet_points
 
-
-def spread_var_vertically_in_wet_grid(full_grid, level_grid, wet_grid, level, mean_vertical_difference):
-    """
-    Spreads values from a given depth level vertically downward into wet grid cells where no data exists.
-
-    Parameters:
-    - full_grid (ndarray): The full variable grid from which to source values.
-    - level_grid (ndarray): The grid to be filled at the current level.
-    - wet_grid (ndarray): Mask indicating wet points (1 = wet, 0 = dry).
-    - level (int): Current level (must be > 0).
-    - mean_vertical_difference (float): Constant to add while copying downward.
-
-    Returns:
-    - level_grid (ndarray): The updated grid with missing values filled vertically.
-    """
-
-    if level == 0:
-        bad_row, bad_col = np.where(np.logical_and(level_grid == 0, wet_grid == 1))
-        raise ValueError(
-            'Cannot spread vertically in the surface layer e.g. at row=' + str(bad_row[0]) + ', col=' + str(bad_col[0]))
-
-    # Identify locations that are wet but uninitialized in level_grid
-    is_remaining = np.logical_and(level_grid == 0, wet_grid == 1)
-    rows_remaining, cols_remaining = np.where(is_remaining)
-
-    for ri in range(len(rows_remaining)):
-        row = rows_remaining[ri]
-        col = cols_remaining[ri]
-        # Fill the level grid by copying from one level above and adding a vertical offset
-        level_grid[row, col] = full_grid[level - 1, row, col] + mean_vertical_difference
-
-    return level_grid

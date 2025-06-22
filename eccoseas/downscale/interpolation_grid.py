@@ -3,8 +3,94 @@ import numpy as np
 from scipy.interpolate import griddata, interp1d
 import netCDF4 as nc4
 
+def count_spreading_rows_and_cols_in_wet_grid(var_grid, source_row_grid, source_col_grid, source_level_grid, wet_grid):
+
+    rows = np.arange(np.shape(var_grid)[0])
+    cols = np.arange(np.shape(var_grid)[1])
+    Cols,Rows = np.meshgrid(cols,rows)
+
+    is_remaining = np.logical_and(var_grid==0,wet_grid==1)
+    n_remaining = np.sum(is_remaining)
+    continue_iter = True
+    for i in range(n_remaining):
+        if continue_iter:
+            Wet_Rows = Rows[wet_grid == 1]
+            Wet_Cols = Cols[wet_grid == 1]
+            Wet_Source_Rows = source_row_grid[wet_grid==1]
+            Wet_Source_Cols = source_col_grid[wet_grid == 1]
+            Wet_Source_Levels = source_level_grid[wet_grid == 1]
+            Wet_Vals = var_grid[wet_grid == 1]
+
+            Wet_Rows = Wet_Rows[Wet_Vals != 0]
+            Wet_Cols = Wet_Cols[Wet_Vals != 0]
+            Wet_Source_Rows = Wet_Source_Rows[Wet_Vals != 0]
+            Wet_Source_Cols = Wet_Source_Cols[Wet_Vals != 0]
+            Wet_Source_Levels = Wet_Source_Levels[Wet_Vals != 0]
+            Wet_Vals = Wet_Vals[Wet_Vals != 0]
+
+            if len(Wet_Vals)>0:
+
+                rows_remaining,cols_remaining = np.where(is_remaining)
+                for ri in range(n_remaining):
+                    row = rows_remaining[ri]
+                    col = cols_remaining[ri]
+                    row_col_dist = ((Wet_Rows.astype(float)-row)**2 + (Wet_Cols.astype(float)-col)**2)**0.5
+                    closest_index = np.argmin(row_col_dist)
+                    if row_col_dist[closest_index]<np.sqrt(2):
+                        var_grid[row,col] = Wet_Vals[closest_index]
+                        source_row_grid[row, col] = Wet_Source_Rows[closest_index]
+                        source_col_grid[row, col] = Wet_Source_Cols[closest_index]
+                        source_level_grid[row, col] = Wet_Source_Levels[closest_index]
+
+                is_remaining = np.logical_and(var_grid == 0, wet_grid == 1)
+                n_remaining_now = np.sum(is_remaining)
+                if n_remaining_now<n_remaining:
+                    n_remaining = n_remaining_now
+                else:
+                    n_remaining = n_remaining_now
+                    continue_iter=False
+
+            else:
+                continue_iter = False
+
+    return(var_grid,source_row_grid,source_col_grid,source_level_grid,n_remaining)
+
+
+def count_spreading_levels_in_wet_grid(full_grid,level_grid,wet_grid,
+                                       source_row_grid_full, source_row_grid,
+                                       source_col_grid_full, source_col_grid,
+                                       source_level_grid_full, source_level_grid,
+                                       level,mean_vertical_difference):
+
+    # if mean_vertical_difference!=0:
+    #     print('Using a mean vertical difference of '+str(mean_vertical_difference))
+
+    if level==0:
+        bad_row, bad_col = np.where(np.logical_and(level_grid == 0, wet_grid == 1))
+        plt.subplot(1, 2, 1)
+        plt.imshow(level_grid,origin='lower')
+        plt.subplot(1,2,2)
+        plt.imshow(wet_grid,origin='lower')
+        plt.show()
+        raise ValueError('Cannot spread vertically in the surface layer e.g. at row='+str(bad_row[0])+', col='+str(bad_col[0]))
+
+    is_remaining = np.logical_and(level_grid==0,wet_grid==1)
+    rows_remaining, cols_remaining = np.where(is_remaining)
+    for ri in range(len(rows_remaining)):
+        row = rows_remaining[ri]
+        col = cols_remaining[ri]
+        level_grid[row,col] = full_grid[level-1,row,col]+mean_vertical_difference
+        source_row_grid[row, col] = source_row_grid_full[level - 1, row, col]
+        source_col_grid[row, col] = source_col_grid_full[level - 1, row, col]
+        source_level_grid[row, col] = source_level_grid_full[level - 1, row, col]
+
+    return(level_grid, source_row_grid, source_col_grid, source_level_grid)
+
+
 def create_interpolation_grid(L0_XC, L0_YC, L0_var, L0_wet_grid, L0_wet_grid_on_L1,
-                              XC_subset, YC_subset, L1_wet_grid):
+                              XC_subset, YC_subset, L1_wet_grid,
+                              testing=False, remove_zeros=True, printing=False, fill_downward=True,
+                              mean_vertical_difference=0):
     """
     Interpolates a 3D variable from a Level 0 grid to a Level 1 grid, 
     handling gaps using horizontal and vertical spreading and optionally
@@ -21,12 +107,8 @@ def create_interpolation_grid(L0_XC, L0_YC, L0_var, L0_wet_grid, L0_wet_grid_on_
     Returns:
         interpolation_type_grid_full, source_row_grid_full, source_col_grid_full, source_level_grid_full
     """
-    testing = False
-    remove_zeros = True
-    printing = True
-    fill_downward = True
+
     fill_with_nearest_at_end = True
-    mean_vertical_difference = 0
 
     # Initialize output arrays
     shape = (L1_wet_grid.shape[0], XC_subset.shape[0], XC_subset.shape[1])
@@ -145,8 +227,10 @@ def create_interpolation_grid(L0_XC, L0_YC, L0_var, L0_wet_grid, L0_wet_grid_on_
 
     return (interpolation_type_grid_full, source_row_grid_full, source_col_grid_full, source_level_grid_full)
 
+
 def create_interpolation_grids(ecco_XC, ecco_YC, ecco_wet_cells, ecco_wet_cells_on_tile_domain,
-                               XC, YC, domain_wet_cells_3D_C, domain_wet_cells_3D_S, domain_wet_cells_3D_W):
+                               XC, YC, domain_wet_cells_3D_C, domain_wet_cells_3D_S, domain_wet_cells_3D_W,
+                               testing = False, printing=False):
     """
     Wrapper function to create interpolation grids for C, S, and W masks.
 
@@ -158,22 +242,23 @@ def create_interpolation_grids(ecco_XC, ecco_YC, ecco_wet_cells, ecco_wet_cells_
     # Create interpolation grid for each velocity component (C, S, W)
     return (
         create_interpolation_grid(ecco_XC, ecco_YC, ecco_grid, ecco_wet_cells, ecco_wet_cells_on_tile_domain,
-                                   XC, YC, domain_wet_cells_3D_C),
+                                   XC, YC, domain_wet_cells_3D_C, testing=testing, printing=printing),
         create_interpolation_grid(ecco_XC, ecco_YC, ecco_grid, ecco_wet_cells, ecco_wet_cells_on_tile_domain,
-                                   XC, YC, domain_wet_cells_3D_S),
+                                   XC, YC, domain_wet_cells_3D_S, testing=testing, printing=printing),
         create_interpolation_grid(ecco_XC, ecco_YC, ecco_grid, ecco_wet_cells, ecco_wet_cells_on_tile_domain,
-                                   XC, YC, domain_wet_cells_3D_W)
+                                   XC, YC, domain_wet_cells_3D_W, testing=testing, printing=printing)
     )
 
-def write_interpolation_grid_to_nc(config_dir, model_name,
+
+def write_interpolation_grid_to_nc(output_file_path,
                                    interpolation_type_grid_C, source_row_grid_C, source_col_grid_C, source_level_grid_C,
                                    interpolation_type_grid_S, source_row_grid_S, source_col_grid_S, source_level_grid_S,
                                    interpolation_type_grid_W, source_row_grid_W, source_col_grid_W, source_level_grid_W):
     """
     Writes the interpolation grids to a NetCDF file grouped by C, S, and W.
     """
-    interpolation_grid_file = f'{model_name}_interpolation_grid.nc'
-    ds = nc4.Dataset(os.path.join(config_dir, 'nc_grids', interpolation_grid_file), 'w')
+
+    ds = nc4.Dataset(output_file_path, 'w')
 
     for name, itg, srg, scg, slg in zip(['C', 'S', 'W'],
         [interpolation_type_grid_C, interpolation_type_grid_S, interpolation_type_grid_W],
@@ -192,3 +277,53 @@ def write_interpolation_grid_to_nc(config_dir, model_name,
         grp.createVariable('source_levels', 'i8', ('levels', 'rows', 'cols'))[:, :, :] = slg
 
     ds.close()
+
+def read_interpolation_grid_from_nc(input_file_path):
+    """
+    Reads interpolation grids from a NetCDF file and returns them as dictionaries.
+    """
+
+    ds = nc4.Dataset(input_file_path, 'r')
+
+    grids = {}
+    for name in ['C', 'S', 'W']:
+        grp = ds[name]
+        grids[name] = {
+            'interp_type': grp['interp_type'][:],
+            'source_rows': grp['source_rows'][:],
+            'source_cols': grp['source_cols'][:],
+            'source_levels': grp['source_levels'][:]
+        }
+
+    ds.close()
+    return grids
+
+def read_interpolation_grid_for_variable(input_file_path, variable_name):
+    """
+    Reads a specific variable's interpolation grid from a NetCDF file.
+
+    Parameters:
+        input_file_path (str): Path to the NetCDF file.
+        variable_name (str): Name of the variable to read
+
+    Returns:
+        dict: Dictionary containing the interpolation type and source grids.
+    """
+
+    if variable_name.lower() in ['vvel','sivice']:
+        mask_name = 'S'
+    elif variable_name.lower() in ['uvel','siuice']:
+        mask_name = 'W'
+    else:
+        mask_name = 'C'
+
+    ds = nc4.Dataset(input_file_path, 'r')
+    grp = ds[mask_name]
+    grids = {
+        'interp_type': grp['interp_type'][:],
+        'source_rows': grp['source_rows'][:],
+        'source_cols': grp['source_cols'][:],
+        'source_levels': grp['source_levels'][:]
+    }
+    ds.close()
+    return grids

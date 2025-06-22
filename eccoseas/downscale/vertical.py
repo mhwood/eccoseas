@@ -27,7 +27,42 @@ def interpolate_var_grid_faces_to_new_depth_levels(var_grid, wet_grid, delR_in, 
     Z_top_out = np.concatenate([np.array([0]), Z_bottom_out[:-1]])
     Z_out = (Z_bottom_out + Z_top_out) / 2
 
-    if len(np.shape(var_grid)) == 3:
+    if len(np.shape(var_grid)) == 2:
+        # Handle 2D case (e.g., raveled grid)
+        new_var_grid = np.zeros((len(delR_out), var_grid.shape[1]))
+        new_wet_grid = np.zeros((len(delR_out), var_grid.shape[1]))
+
+        for i in range(var_grid.shape[1]):
+            test_profile = var_grid[:, i]
+
+            if np.sum(test_profile != 0) > 1:
+                set_int_linear = interp1d(Z_in[test_profile != 0], test_profile[test_profile != 0],
+                                          bounds_error=False, fill_value=np.nan)
+                new_profile = set_int_linear(Z_out)
+
+                # Fill values above first valid depth with surface value
+                new_profile[np.abs(Z_out) < np.abs(Z_in[0])] = new_profile[~np.isnan(new_profile)][0]
+
+                if np.size(np.abs(Z_in[test_profile == 0])) > 0:
+                    first_zero_depth = np.abs(Z_in[test_profile == 0])[0]
+                    bottom_value = new_profile[~np.isnan(new_profile)][-1]
+                    new_profile[
+                        np.logical_and(np.isnan(new_profile), np.abs(Z_out) < first_zero_depth)] = bottom_value
+
+                # Fill remaining NaNs downward
+                if np.any(np.isnan(new_profile)):
+                    if np.isnan(new_profile[0]):
+                        raise ValueError('The surface value is nan')
+                    for k in range(1, len(new_profile)):
+                        if np.isnan(new_profile[k]):
+                            new_profile[k] = new_profile[k - 1]
+
+                new_var_grid[:, i] = new_profile
+
+            elif np.sum(test_profile == 0) == 1:
+                new_var_grid[0, i] = var_grid[0, i]
+
+    elif len(np.shape(var_grid)) == 3:
         # Handle 3D case
         new_var_grid = np.zeros((len(delR_out), var_grid.shape[1], var_grid.shape[2]))
         new_wet_grid = np.zeros((len(delR_out), var_grid.shape[1], var_grid.shape[2]))
@@ -97,15 +132,17 @@ def interpolate_var_grid_faces_to_new_depth_levels(var_grid, wet_grid, delR_in, 
                     elif np.sum(test_profile == 0) == 1:
                         new_var_grid[t, 0, i, j] = var_grid[t, 0, i, j]
     else:
-        raise ValueError('The input array should be dim 3 or 4')
+        raise ValueError('The input array should be dim 2 or 3 or 4')
+
 
     # Handle wet grid interpolation if needed
     if wet_grid.shape[0] != len(delR_out):
-        new_wet_grid = np.zeros((len(delR_out), wet_grid.shape[1], wet_grid.shape[2]))
 
-        for i in range(wet_grid.shape[1]):
-            for j in range(wet_grid.shape[2]):
-                test_profile = wet_grid[:, i, j]
+        if len(np.shape(wet_grid)) == 2:
+            new_wet_grid = np.zeros((len(delR_out), wet_grid.shape[1]))
+
+            for i in range(wet_grid.shape[1]):
+                test_profile = wet_grid[:, i]
 
                 if np.sum(test_profile != 0) > 1:
                     set_int_linear = interp1d(Z_in[test_profile != 0], test_profile[test_profile != 0],
@@ -119,17 +156,47 @@ def interpolate_var_grid_faces_to_new_depth_levels(var_grid, wet_grid, delR_in, 
                         new_profile[
                             np.logical_and(np.isnan(new_profile), np.abs(Z_out) < first_zero_depth)] = bottom_value
 
-                    new_wet_grid[:, i, j] = new_profile
+                    new_wet_grid[:, i] = new_profile
 
                 elif np.sum(test_profile == 0) == 1:
-                    new_wet_grid[0, i, j] = wet_grid[0, i, j]
+                    new_wet_grid[0, i] = wet_grid[0, i]
 
-        # Clean up interpolated wet grid
-        new_wet_grid[np.isnan(new_wet_grid)] = 0
-        new_wet_grid = np.round(new_wet_grid).astype(int)
+            # Clean up interpolated wet grid
+            new_wet_grid[np.isnan(new_wet_grid)] = 0
+            new_wet_grid = np.round(new_wet_grid).astype(int)
 
-        # Replace NaNs in var grid
-        new_var_grid[np.isnan(new_var_grid)] = 0
+            # Replace NaNs in var grid
+            new_var_grid[np.isnan(new_var_grid)] = 0
+        elif len(np.shape(wet_grid)) == 3:
+            new_wet_grid = np.zeros((len(delR_out), wet_grid.shape[1], wet_grid.shape[2]))
+
+            for i in range(wet_grid.shape[1]):
+                for j in range(wet_grid.shape[2]):
+                    test_profile = wet_grid[:, i, j]
+
+                    if np.sum(test_profile != 0) > 1:
+                        set_int_linear = interp1d(Z_in[test_profile != 0], test_profile[test_profile != 0],
+                                                  bounds_error=False, fill_value=np.nan)
+                        new_profile = set_int_linear(Z_out)
+                        new_profile[np.abs(Z_out) < np.abs(Z_in[0])] = new_profile[~np.isnan(new_profile)][0]
+
+                        if np.size(np.abs(Z_in[test_profile == 0])) > 0:
+                            first_zero_depth = np.abs(Z_in[test_profile == 0])[0]
+                            bottom_value = new_profile[~np.isnan(new_profile)][-1]
+                            new_profile[
+                                np.logical_and(np.isnan(new_profile), np.abs(Z_out) < first_zero_depth)] = bottom_value
+
+                        new_wet_grid[:, i, j] = new_profile
+
+                    elif np.sum(test_profile == 0) == 1:
+                        new_wet_grid[0, i, j] = wet_grid[0, i, j]
+
+            # Clean up interpolated wet grid
+            new_wet_grid[np.isnan(new_wet_grid)] = 0
+            new_wet_grid = np.round(new_wet_grid).astype(int)
+
+            # Replace NaNs in var grid
+            new_var_grid[np.isnan(new_var_grid)] = 0
     else:
         new_wet_grid = wet_grid
 

@@ -155,6 +155,41 @@ def write_mitgcm_pickup_file(output_file_path, pickup_grid, metadata, dtype='>f8
     f.write(output)
     f.close()
 
+def read_mitgcm_pickup_file(pickup_file_path, Nr, verbose=False, dtype='>f8'):
+
+    if pickup_file_path.endswith('.data'):
+        raise ValueError('Pickup file path should not end with .data (omit extension)')
+    if pickup_file_path.endswith('.meta'):
+        raise ValueError('Pickup file path should not end with .meta (omit extension)')
+
+    if verbose:
+        print('      Reading from '+pickup_file_path)
+
+    global_metadata = read_pickup_metadata(pickup_file_path+'.meta')
+    global_data = np.fromfile(pickup_file_path+'.data', dtype)
+    global_data = global_data.reshape(
+        (global_metadata['nrecords'], global_metadata['dimList'][1][0],
+         global_metadata['dimList'][0][0]))
+
+    has_Nr = {'uvel': True, 'vvel': True, 'theta': True,
+              'salt': True, 'gunm1': True, 'gvnm1': True,
+              'gunm2': True, 'gvnm2': True, 'etan': False,
+              'detahdt': False, 'etah': False}
+
+    var_grids = {}
+
+    start_row = 0
+    for var_name in global_metadata['fldList']:
+        if has_Nr[var_name.strip().lower()]:
+            end_row = start_row + Nr
+        else:
+            end_row = start_row + 1
+        var_grid = global_data[start_row:end_row,:,:]
+        var_grids[var_name] = var_grid
+        start_row=end_row
+
+    return(var_grids, global_metadata)
+
 #################################################################################################
 # seaice pickup functions
 

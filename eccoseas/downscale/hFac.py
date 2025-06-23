@@ -319,3 +319,58 @@ def create_hFacW_grid(bathy, delR, hFacMin=0.2, hFacMinDr=5.0):
     hFacW = np.where(invalid_mask2, 0, np.maximum(hFac_loc, hFacMnSz_3d))
 
     return hFacW
+
+def create_surface_hFacC_grid(bathy, delR, hFacMin=0.2, hFacMinDr=5.0):
+    # This is from MITgcm inside ini_masks_etc.F
+    # Note: R_low is just the bathy
+    # Note: drF is the grid spacing (provided)
+    # Note: recip_drF is the reciprocal of drF
+    # Note: Ro_surf is the z coord of the surface (essentially always 0 for the ocean?)
+    # C--   Calculate lopping factor hFacC : over-estimate the part inside of the domain
+    # C     taking into account the lower_R Boundary (Bathymetry / Top of Atmos)
+    #         DO k=1, Nr
+    #          hFacMnSz = MAX( hFacMin, MIN(hFacMinDr*recip_drF(k),oneRL) )
+    #          DO j=1-OLy,sNy+OLy
+    #           DO i=1-OLx,sNx+OLx
+    # C      o Non-dimensional distance between grid bound. and domain lower_R bound.
+    #            hFac_loc = (rF(k)-R_low(i,j,bi,bj))*recip_drF(k)
+    # C      o Select between, closed, open or partial (0,1,0-1)
+    #            hFac_loc = MIN( MAX( hFac_loc, zeroRL ) , oneRL )
+    # C      o Impose minimum fraction and/or size (dimensional)
+    #            IF ( hFac_loc.LT.hFacMnSz*halfRL .OR.
+    #      &          R_low(i,j,bi,bj).GE.Ro_surf(i,j,bi,bj) ) THEN
+    #              hFacC(i,j,k,bi,bj) = zeroRS
+    #            ELSE
+    #              hFacC(i,j,k,bi,bj) = MAX( hFac_loc, hFacMnSz )
+    #            ENDIF
+    #           ENDDO
+    #          ENDDO
+    #         ENDDO
+
+    # Define grids with same names as those in MITgcm
+    RU = -1 * np.cumsum(delR)
+    RL = np.concatenate([[0], RU[:-1]])
+    R_low = bathy
+    drF = RL - RU
+    recip_drF = 1 / drF
+
+    # Pythonize the above loops
+    hFacC = np.zeros((np.shape(bathy)[0], np.shape(bathy)[1]))
+    # for k in range(len(RL)):
+    # if k%5==0:
+    #     print('     - Calculating hFacC for depth cells '+str(k)+' to '+str(k+5))
+    k=0
+    hFacMnSz = np.max([hFacMin, np.min([hFacMinDr * recip_drF[k], 1])])
+    for i in range(np.shape(bathy)[0]):
+        for j in range(np.shape(bathy)[1]):
+            #      o Non-dimensional distance between grid bound. and domain lower_R bound.
+            hFac_loc = (RL[k] - R_low[i, j]) * recip_drF[k]
+            #      o Select between, closed, open or partial (0,1,0-1)
+            hFac_loc = np.min([np.max([hFac_loc, 0]), 1])
+            #      o Impose minimum fraction and/or size (dimensional)
+            if hFac_loc <= hFacMnSz * 0.5 or R_low[i, j] >= 0:
+                hFacC[i, j] = 0
+            else:
+                hFacC[i, j] = np.max([hFac_loc, hFacMnSz])
+
+    return(hFacC)

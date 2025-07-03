@@ -1,0 +1,9 @@
+#!/bin/bash
+#SBATCH --partition=nodes
+#SBATCH --nodes=3
+#SBATCH --ntasks=72
+#SBATCH --time=1200:00:00
+
+export MPI_HOME=/home/mwood/.conda/envs/cs185c
+mpirun -np 72 ./mitgcmuv
+

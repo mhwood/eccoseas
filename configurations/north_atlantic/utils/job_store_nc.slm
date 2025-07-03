@@ -1,0 +1,14 @@
+#!/bin/bash
+#SBATCH --partition=nodes
+#SBATCH --nodes=1
+#SBATCH --ntasks=1
+#SBATCH --time=1:00:00
+
+export PATH="$HOME/miniconda/bin:$PATH"
+
+source activate base
+conda activate mitgcmpy
+
+config_dir='/home/mwood/nobackupp/Ocean_Modelling/MITgcm/configurations/north_atlantic'
+
+python3 post_processing/store_output_as_nc.py -d $config_dir

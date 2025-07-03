@@ -49,7 +49,11 @@
       SEAICE_dryIceAlb_south   = 0.75
       SEAICE_wetIceAlb_south   = 0.66
       SEAICE_drySnowAlb_south  = 0.84
-      SEAICE_wetSnowAlb_south  = 0.7 
+      SEAICE_wetSnowAlb_south  = 0.7
+# ICs
+      	AreaFile           = 'SIarea_IC.bin',
+	HsnowFile          = 'SIhsnow_IC.bin',
+	HeffFile           = 'SIheff_IC.bin', 
  /
 #
  &SEAICE_PARM02

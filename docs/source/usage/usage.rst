@@ -44,6 +44,7 @@ The following packages are required for **eccoseas**
    netCDF4
    scipy
    pyproj
+   numba
 
 In addition, if you'd like to follow along with the regional model examples in this 
 documentation, then the following packages are necessary:

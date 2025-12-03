@@ -83,3 +83,10 @@ Initial Conditions
 .. toctree::
 
    initial_conditions
+
+Boundary Conditions
+===========================
+
+.. toctree::
+
+   boundary_conditions
